@@ -13,8 +13,9 @@ Rebuilding the [Clawd](https://github.com/Tuanm/clawd) AI agent platform from sc
 - Reference Clawd's own docs at https://github.com/Tuanm/clawd/tree/main/docs for each milestone.
 
 ## Current State
-- **Phase:** Design (brainstorming, not yet coding)
-- **Design status:** Section 1 (Mental Model) and Section 2 (10 Milestones) approved. Section 3 (Tech Stack) in progress.
+- **Phase:** Ready to implement — design approved, M1 spec written
+- **Current milestone:** M1 (Terminal Chatbot) — spec done, implementation next
+- **Design docs:** `docs/superpowers/specs/` (README + 3 concept files + 10 milestone files)
 
 ## 10 Milestones
 - M1: Terminal chatbot (LLM API, streaming, tool_use format)
@@ -41,8 +42,38 @@ Rebuilding the [Clawd](https://github.com/Tuanm/clawd) AI agent platform from sc
 3. Docs structure: CLAUDE.md + docs/adr/ + docs/journal/ + docs/concepts/ + docs/clawd-notes/
 4. Test cases defined per milestone (terminal/curl/wscat based until M10)
 
+## Workflow Per Milestone
+
+**Bắt buộc theo thứ tự này cho mỗi milestone:**
+
+```
+1. Read design file     docs/superpowers/specs/milestones/M0X-xxx.md
+2. Write spec file      docs/superpowers/specs/milestones/M0X-xxx.spec.md
+3. User reviews spec    → approval required before coding
+4. Write impl plan      invoke writing-plans skill
+5. Implement            code theo spec
+6. Verify               check all acceptance criteria in spec file
+7. Update CLAUDE.md     cập nhật Current State sang milestone tiếp theo
+```
+
+**Không được bắt đầu code khi chưa có `.spec.md` được approve.**
+
+## Spec Format (M0X-xxx.spec.md)
+
+Mỗi spec file phải có đủ các sections:
+1. Project Setup (deps, env, tsconfig, run command)
+2. Data Structures (TypeScript interfaces chính xác)
+3. File Specifications (responsibility + function signatures per file)
+4. Feature-specific details (tools, prompts, schemas...)
+5. Edge Cases & Error Handling (table format)
+6. Acceptance Criteria (checklist, verify được)
+7. File Structure (final, với line count estimate)
+8. What is NOT in this milestone
+
 ## Conventions
-- ADR files in docs/adr/ for architecture decisions
-- Learning journal in docs/journal/
-- Concept explanations in docs/concepts/ (Vietnamese, own words)
-- Clawd analysis notes in docs/clawd-notes/
+- ADR files in `docs/adr/` for architecture decisions
+- Learning journal in `docs/journal/`
+- Concept explanations in `docs/concepts/` (Vietnamese, own words)
+- Clawd analysis notes in `docs/clawd-notes/`
+- Spec files: `docs/superpowers/specs/milestones/M0X-xxx.spec.md` (1 per milestone, viết trước khi code)
+- Design files: `docs/superpowers/specs/milestones/M0X-xxx.md` (high-level overview, đã viết sẵn)

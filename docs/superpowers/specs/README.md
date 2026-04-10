@@ -12,6 +12,26 @@ Rebuild [Clawd](https://github.com/Tuanm/clawd) from scratch across 10 increment
 
 ---
 
+## Workflow Per Milestone
+
+Trước khi code bất kỳ milestone nào, phải đi đúng thứ tự:
+
+```
+M0X-xxx.md        ← 1. Đọc design (high-level, scope, concepts)
+M0X-xxx.spec.md   ← 2. Viết spec (chi tiết: types, edge cases, acceptance criteria)
+                  ← 3. User approve spec
+                  ← 4. Viết implementation plan (writing-plans skill)
+                  ← 5. Code
+                  ← 6. Verify acceptance criteria
+```
+
+| File | Mục đích |
+|---|---|
+| `M0X-xxx.md` | "What & Why" — scope, concepts, FE analogies |
+| `M0X-xxx.spec.md` | "Exactly how" — interfaces, function signatures, edge cases, checklist |
+
+---
+
 ## Architecture & Concepts
 
 - [Mental Model & Core Architecture](./01-mental-model.md) — "Clawd is a chat room, agents are participants"
@@ -20,18 +40,18 @@ Rebuild [Clawd](https://github.com/Tuanm/clawd) from scratch across 10 increment
 
 ## 10 Milestones
 
-| # | File | Concept | You'll understand |
-|---|---|---|---|
-| M1 | [Terminal Chatbot](./milestones/M01-terminal-chatbot.md) | LLM API, streaming | How Claude Code calls the AI |
-| M2 | [Chat Server](./milestones/M02-chat-server.md) | HTTP, WebSocket, SQLite | Backend of any chat app |
-| M3 | [Agent Loop](./milestones/M03-agent-loop.md) | ReAct, polling | Core of Claude Code |
-| M4 | [Tool System](./milestones/M04-tool-system.md) | Tool schema, execution | Why AI can "do things" |
-| M5 | [Context Management](./milestones/M05-context-management.md) | Token counting, compression | Real limits of AI |
-| M6 | [Memory System](./milestones/M06-memory-system.md) | FTS5, 3-tier memory | How AI "remembers" |
-| M7 | [Multi-Agent](./milestones/M07-multi-agent.md) | Spawn, orchestration | AI collaboration |
-| M8 | [MCP Protocol](./milestones/M08-mcp-protocol.md) | Server + client | Future of AI tooling |
-| M9 | [Scheduling & Plugins](./milestones/M09-scheduling-plugins.md) | Cron, extensibility | Making it extensible |
-| M10 | [Browser & UI](./milestones/M10-browser-ui.md) | Chrome ext, React UI | Full stack AI platform |
+| # | Design | Spec | Concept | Status |
+|---|---|---|---|---|
+| M1 | [Terminal Chatbot](./milestones/M01-terminal-chatbot.md) | [spec](./milestones/M01-terminal-chatbot.spec.md) | LLM API, streaming | Spec done ✓ |
+| M2 | [Chat Server](./milestones/M02-chat-server.md) | — | HTTP, WebSocket, SQLite | Pending |
+| M3 | [Agent Loop](./milestones/M03-agent-loop.md) | — | ReAct, polling | Pending |
+| M4 | [Tool System](./milestones/M04-tool-system.md) | — | Tool schema, execution | Pending |
+| M5 | [Context Management](./milestones/M05-context-management.md) | — | Token counting, compression | Pending |
+| M6 | [Memory System](./milestones/M06-memory-system.md) | — | FTS5, 3-tier memory | Pending |
+| M7 | [Multi-Agent](./milestones/M07-multi-agent.md) | — | Spawn, orchestration | Pending |
+| M8 | [MCP Protocol](./milestones/M08-mcp-protocol.md) | — | Server + client | Pending |
+| M9 | [Scheduling & Plugins](./milestones/M09-scheduling-plugins.md) | — | Cron, extensibility | Pending |
+| M10 | [Browser & UI](./milestones/M10-browser-ui.md) | — | Chrome ext, React UI | Pending |
 
 ## Reference: Clawd Documentation
 
