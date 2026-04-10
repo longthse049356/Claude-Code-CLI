@@ -4,6 +4,28 @@ Hướng dẫn thực tế để làm việc hiệu quả với Claude Code CLI 
 
 ---
 
+## Quy tắc bắt buộc với Claude
+
+> **Claude KHÔNG được tự ý commit hoặc xóa file. Phải hỏi trước.**
+
+```
+TRƯỚC KHI COMMIT:
+  → Hỏi: "Tôi chuẩn bị commit [X files] với message '[msg]'. Bạn đồng ý không?"
+  → Chờ user confirm → mới chạy git commit
+
+TRƯỚC KHI XÓA FILE (đặc biệt quan trọng):
+  → Hỏi: "Tôi cần xóa file [path] vì [lý do]. Bạn có chắc không?"
+  → Chờ user confirm → mới chạy rm / git rm
+
+KHÔNG cần hỏi:
+  → git add, git status, git diff, git log (read-only operations)
+  → Tạo file mới (không phải xóa)
+```
+
+**Lý do:** Claude xóa/commit sai có thể làm mất code không khôi phục được.
+
+---
+
 ## Khi nào nên commit?
 
 ### Rule of thumb: "Commit trước khi Claude chạm vào code"

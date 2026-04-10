@@ -42,7 +42,15 @@ Rebuilding the [Clawd](https://github.com/Tuanm/clawd) AI agent platform from sc
 3. Docs structure: CLAUDE.md + docs/adr/ + docs/journal/ + docs/concepts/ + docs/clawd-notes/
 4. Test cases defined per milestone (terminal/curl/wscat based until M10)
 
-## Workflow Per Milestone
+## Rules — KHÔNG được vi phạm
+
+1. **KHÔNG tự ý commit** — Phải hỏi user trước khi chạy `git commit`
+2. **KHÔNG tự ý xóa file** — Phải hỏi user trước khi chạy `rm` hoặc `git rm`
+3. **KHÔNG bắt đầu code** khi chưa có `.spec.md` được approve
+
+Read-only operations (git status, diff, log, add) không cần hỏi.
+
+
 
 **Bắt buộc theo thứ tự này cho mỗi milestone:**
 
