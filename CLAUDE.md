@@ -70,6 +70,9 @@ Mỗi spec file phải có đủ các sections:
 7. File Structure (final, với line count estimate)
 8. What is NOT in this milestone
 
+## Key References
+- `docs/workflow.md` — Khi nào commit, khi nào dùng worktree/subagent/agent team, tips per milestone
+
 ## Conventions
 - ADR files in `docs/adr/` for architecture decisions
 - Learning journal in `docs/journal/`
