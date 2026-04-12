@@ -13,9 +13,10 @@ Rebuilding the [Clawd](https://github.com/Tuanm/clawd) AI agent platform from sc
 - Reference Clawd's own docs at https://github.com/Tuanm/clawd/tree/main/docs for each milestone.
 
 ## Current State
-- **Phase:** Ready to implement — design approved, M1 spec written
-- **Current milestone:** M1 (Terminal Chatbot) — spec done, implementation next
+- **Phase:** M1 complete ✅ — ready for M2
+- **Current milestone:** M2 (Chat Server) — chưa bắt đầu
 - **Design docs:** `docs/superpowers/specs/` (README + 3 concept files + 10 milestone files)
+- **Last tag:** `M1-done`
 
 ## 10 Milestones
 - M1: Terminal chatbot (LLM API, streaming, tool_use format)
