@@ -3,8 +3,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "start": "bun run src/index.ts",
-    "dev": "bun --hot run src/index.ts"
+    "dev": "bun run src/server.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.87.0"

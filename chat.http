@@ -1,0 +1,36 @@
+### Create channel
+POST http://localhost:3456/channels
+Content-Type: application/json
+
+{"name": "general"}
+
+###
+
+### Send message — replace CHANNEL_ID with id from above response
+POST http://localhost:3456/channels/CHANNEL_ID/messages
+Content-Type: application/json
+
+{"text": "Hello from M2"}
+
+###
+
+### Get messages — replace CHANNEL_ID
+GET http://localhost:3456/channels/CHANNEL_ID/messages
+
+###
+
+### Error: missing name
+POST http://localhost:3456/channels
+Content-Type: application/json
+
+{}
+
+###
+
+### Error: channel not found
+GET http://localhost:3456/channels/does-not-exist/messages
+
+###
+
+### Unknown route
+GET http://localhost:3456/foo

@@ -1,6 +1,6 @@
 // src/types.ts
 
-// --- Content Blocks (what LLM returns) ---
+// --- Claude API Types (used by providers/anthropic.ts) ---
 
 export interface TextBlock {
   type: "text";
@@ -16,8 +16,6 @@ export interface ToolUseBlock {
 
 export type ContentBlock = TextBlock | ToolUseBlock;
 
-// --- Messages (conversation history) ---
-
 export interface UserMessage {
   role: "user";
   content: string;
@@ -30,8 +28,6 @@ export interface AssistantMessage {
 
 export type Message = UserMessage | AssistantMessage;
 
-// --- API Response ---
-
 export interface StreamResult {
   content: ContentBlock[];
   stopReason: "end_turn" | "tool_use" | "max_tokens";
@@ -41,8 +37,6 @@ export interface StreamResult {
   };
 }
 
-// --- Tool Definition (sent to API) ---
-
 export interface ToolDefinition {
   name: string;
   description: string;
@@ -51,4 +45,50 @@ export interface ToolDefinition {
     properties: Record<string, unknown>;
     required?: string[];
   };
+}
+
+// --- Database Models (M2) ---
+
+export interface Channel {
+  id: string;           // UUID
+  name: string;
+  created_at: number;   // Unix ms timestamp
+}
+
+export interface DbMessage {
+  id: string;           // UUID
+  channel_id: string;   // FK → channels.id
+  text: string;
+  role: "user" | "agent"; // M2: always "user"
+  created_at: number;   // Unix ms timestamp
+}
+
+export interface Agent {
+  id: string;           // UUID
+  name: string;
+  channel_id: string;   // FK → channels.id
+  created_at: number;
+}
+
+// --- HTTP Request Bodies ---
+
+export interface CreateChannelBody {
+  name: string;
+}
+
+export interface CreateMessageBody {
+  text: string;
+}
+
+// --- WebSocket Broadcast ---
+
+export interface WsBroadcast {
+  type: "new_message";
+  data: DbMessage;
+}
+
+// --- API Error Response ---
+
+export interface ApiError {
+  error: string;
 }

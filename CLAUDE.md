@@ -82,6 +82,9 @@ Mỗi spec file phải có đủ các sections:
 ## Key References
 - `docs/workflow.md` — Khi nào commit, khi nào dùng worktree/subagent/agent team, tips per milestone
 
+## Skills
+- `docs/superpowers/skills/bun-backend-patterns/SKILL.md` — Backend patterns cho Bun stack: REST routing, SQLite repository, WebSocket, error handling, caching, auth, rate limiting, background jobs, logging
+
 ## Conventions
 - ADR files in `docs/adr/` for architecture decisions
 - Learning journal in `docs/journal/`
