@@ -52,20 +52,33 @@ export function initDatabase(path = "chat.db"): void {
   stmtGetMessages = db.prepare(
     "SELECT * FROM messages WHERE channel_id = ? ORDER BY created_at ASC"
   );
+
+  console.log(`[DB] opened "${path}" with WAL mode`);
+  console.log(`[DB] prepared statements compiled`);
 }
 
 export function createChannel(id: string, name: string, createdAt: number): void {
+  console.log(`[DB] INSERT channel — id="${id}" name="${name}"`);
   stmtInsertChannel.run(id, name, createdAt);
+  console.log(`[DB] INSERT channel OK`);
 }
 
 export function getChannel(id: string): Channel | null {
-  return stmtGetChannel.get(id) as Channel | null;
+  console.log(`[DB] SELECT channel — id="${id}"`);
+  const result = stmtGetChannel.get(id) as Channel | null;
+  console.log(`[DB] SELECT channel → ${result ? `found: "${result.name}"` : "NOT FOUND"}`);
+  return result;
 }
 
 export function createMessage(msg: DbMessage): void {
+  console.log(`[DB] INSERT message — id="${msg.id}" text="${msg.text}"`);
   stmtInsertMessage.run(msg.id, msg.channel_id, msg.text, msg.role, msg.created_at);
+  console.log(`[DB] INSERT message OK`);
 }
 
 export function getMessagesByChannel(channelId: string): DbMessage[] {
-  return stmtGetMessages.all(channelId) as DbMessage[];
+  console.log(`[DB] SELECT messages — channel_id="${channelId}"`);
+  const results = stmtGetMessages.all(channelId) as DbMessage[];
+  console.log(`[DB] SELECT messages → ${results.length} row(s)`);
+  return results;
 }

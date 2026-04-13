@@ -8,6 +8,7 @@ import {
 import { broadcast } from "./websocket.ts";
 
 function json(data: unknown, status = 200): Response {
+  console.log(`[ROUTER] → response ${status}: ${JSON.stringify(data)}`);
   return new Response(JSON.stringify(data), {
     status,
     headers: { "Content-Type": "application/json" },
@@ -17,20 +18,22 @@ function json(data: unknown, status = 200): Response {
 export async function handleRequest(req: Request): Promise<Response> {
   const url = new URL(req.url);
   const parts = url.pathname.split("/").filter(Boolean);
-  // parts examples:
-  //   POST /channels          → ["channels"]
-  //   GET  /channels/abc/messages → ["channels", "abc", "messages"]
 
   // POST /channels — create a new channel
   if (req.method === "POST" && parts.length === 1 && parts[0] === "channels") {
+    console.log(`[ROUTER] matched: POST /channels`);
+
     let body: CreateChannelBody;
     try {
       body = (await req.json()) as CreateChannelBody;
+      console.log(`[ROUTER] body: ${JSON.stringify(body)}`);
     } catch {
+      console.log(`[ROUTER] body parse FAILED — invalid JSON`);
       return json({ error: "invalid JSON" } satisfies ApiError, 400);
     }
 
     if (!body.name || body.name.trim() === "") {
+      console.log(`[ROUTER] validation FAILED — name is required`);
       return json({ error: "name is required" } satisfies ApiError, 400);
     }
 
@@ -49,10 +52,17 @@ export async function handleRequest(req: Request): Promise<Response> {
     parts[2] === "messages"
   ) {
     const channelId = parts[1];
-    if (!getChannel(channelId)) {
+    console.log(`[ROUTER] matched: GET /channels/:id/messages — channelId="${channelId}"`);
+
+    const channel = getChannel(channelId);
+    if (!channel) {
+      console.log(`[ROUTER] channel "${channelId}" NOT FOUND`);
       return json({ error: "channel not found" } satisfies ApiError, 404);
     }
-    return json(getMessagesByChannel(channelId));
+
+    const messages = getMessagesByChannel(channelId);
+    console.log(`[ROUTER] returning ${messages.length} message(s)`);
+    return json(messages);
   }
 
   // POST /channels/:id/messages — send a message to a channel
@@ -63,19 +73,25 @@ export async function handleRequest(req: Request): Promise<Response> {
     parts[2] === "messages"
   ) {
     const channelId = parts[1];
+    console.log(`[ROUTER] matched: POST /channels/:id/messages — channelId="${channelId}"`);
 
     let body: CreateMessageBody;
     try {
       body = (await req.json()) as CreateMessageBody;
+      console.log(`[ROUTER] body: ${JSON.stringify(body)}`);
     } catch {
+      console.log(`[ROUTER] body parse FAILED — invalid JSON`);
       return json({ error: "invalid JSON" } satisfies ApiError, 400);
     }
 
     if (!body.text || body.text.trim() === "") {
+      console.log(`[ROUTER] validation FAILED — text is required`);
       return json({ error: "text is required" } satisfies ApiError, 400);
     }
 
-    if (!getChannel(channelId)) {
+    const channel = getChannel(channelId);
+    if (!channel) {
+      console.log(`[ROUTER] channel "${channelId}" NOT FOUND`);
       return json({ error: "channel not found" } satisfies ApiError, 404);
     }
 
@@ -88,11 +104,13 @@ export async function handleRequest(req: Request): Promise<Response> {
     };
 
     createMessage(msg);
+    console.log(`[ROUTER] broadcasting to WS clients...`);
     broadcast({ type: "new_message", data: msg });
 
     return json(msg, 201);
   }
 
   // No route matched
+  console.log(`[ROUTER] no route matched for ${req.method} ${url.pathname}`);
   return json({ error: "not found" } satisfies ApiError, 404);
 }

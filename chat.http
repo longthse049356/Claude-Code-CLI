@@ -1,25 +1,117 @@
-### Create channel
+# M2 Chat Server — Test Scenarios
+# Dùng với VS Code REST Client hoặc import vào Postman
+#
+# HƯỚNG DẪN:
+#   1. Start server: bun run dev
+#   2. Chạy từng request theo thứ tự
+#   3. Copy id từ response 1.1 và paste vào CHANNEL_ID trong các request sau
+#   4. Quan sát terminal để thấy log flow
+#
+# LOG FORMAT (terminal):
+#   [SERVER] → nhận request
+#   [ROUTER] → route matching + validation
+#   [DB]     → database operation
+#   [WS]     → websocket broadcast
+# ─────────────────────────────────────────────────────────────
+
+# ═══════════════════════════════════════════════════════════════
+# NHÓM 1: HAPPY PATH — Luồng chính hoạt động đúng
+# ═══════════════════════════════════════════════════════════════
+
+### 1.1 Tạo channel mới
+# @name createChannel
+# Expected terminal:
+#   [SERVER] POST /channels
+#   [ROUTER] matched: POST /channels
+#   [ROUTER] body: {"name":"general"}
+#   [DB] INSERT channel — id="xxx" name="general"
+#   [DB] INSERT channel OK
+#   [ROUTER] → response 201: {"id":"xxx","name":"general","created_at":...}
+# Expected response: 201 { id, name, created_at }
 POST http://localhost:3456/channels
 Content-Type: application/json
 
-{"name": "general"}
+{"name": "general2"}
 
 ###
 
-### Send message — replace CHANNEL_ID with id from above response
-POST http://localhost:3456/channels/CHANNEL_ID/messages
+### 1.2 Gửi message vào channel
+# ⚠️  THAY CHANNEL_ID bằng id từ response 1.1
+# Expected terminal:
+#   [SERVER] POST /channels/xxx/messages
+#   [ROUTER] matched: POST /channels/:id/messages — channelId="xxx"
+#   [ROUTER] body: {"text":"Hello M2!"}
+#   [DB] SELECT channel → found: "general"
+#   [DB] INSERT message OK
+#   [WS] broadcast — no clients connected, skipping
+#   [ROUTER] → response 201
+# Expected response: 201 { id, channel_id, text, role, created_at }
+POST http://localhost:3456/channels/{{createChannel.response.body.id}}/messages
 Content-Type: application/json
 
-{"text": "Hello from M2"}
+{"text": "Hello M2!"}
 
 ###
 
-### Get messages — replace CHANNEL_ID
-GET http://localhost:3456/channels/CHANNEL_ID/messages
+### 1.3 Gửi thêm 2 messages nữa
+POST http://localhost:3456/channels/{{createChannel.response.body.id}}/messages
+Content-Type: application/json
+
+{"text": "Second message"}
 
 ###
 
-### Error: missing name
+POST http://localhost:3456/channels/{{createChannel.response.body.id}}/messages
+Content-Type: application/json
+
+{"text": "Third message"}
+
+###
+
+### 1.4 Lấy tất cả messages trong channel
+# Expected terminal:
+#   [SERVER] GET /channels/xxx/messages
+#   [ROUTER] matched: GET /channels/:id/messages — channelId="xxx"
+#   [DB] SELECT channel → found: "general"
+#   [DB] SELECT messages → 3 row(s)
+#   [ROUTER] returning 3 message(s)
+#   [ROUTER] → response 200
+# Expected response: 200 [ array 3 messages, sorted by created_at ASC ]
+GET http://localhost:3456/channels/{{createChannel.response.body.id}}/messages
+
+###
+
+
+# ═══════════════════════════════════════════════════════════════
+# NHÓM 2: WEBSOCKET — Real-time broadcast
+# ═══════════════════════════════════════════════════════════════
+# Cách test trong Postman:
+#   New Request → chọn "WebSocket" → URL: ws://localhost:3456/ws → Connect
+#   Terminal sẽ in: [WS] client connected. Total: 1
+#   Sau đó chạy request 2.1 bên dưới → Postman WS tab sẽ nhận message
+
+### 2.1 Gửi message khi có WS client đang connect
+# Expected terminal:
+#   [WS] broadcast to 1 client(s) — payload: {"type":"new_message","data":{...}}
+#   [WS] broadcast done
+# Expected WS client nhận được:
+#   {"type":"new_message","data":{"id":"...","text":"Realtime!","role":"user",...}}
+POST http://localhost:3456/channels/{{createChannel.response.body.id}}/messages
+Content-Type: application/json
+
+{"text": "Realtime! — check your WS client"}
+
+###
+
+
+# ═══════════════════════════════════════════════════════════════
+# NHÓM 3: ERROR CASES — Validation và not found
+# ═══════════════════════════════════════════════════════════════
+
+### 3.1 POST /channels thiếu name
+# Expected terminal:
+#   [ROUTER] validation FAILED — name is required
+# Expected response: 400 { "error": "name is required" }
 POST http://localhost:3456/channels
 Content-Type: application/json
 
@@ -27,10 +119,86 @@ Content-Type: application/json
 
 ###
 
-### Error: channel not found
+### 3.2 POST /channels với name là empty string
+# Expected response: 400 { "error": "name is required" }
+POST http://localhost:3456/channels
+Content-Type: application/json
+
+{"name": ""}
+
+###
+
+### 3.3 POST /channels với name chỉ có spaces
+# Expected response: 400 { "error": "name is required" }
+POST http://localhost:3456/channels
+Content-Type: application/json
+
+{"name": "   "}
+
+###
+
+### 3.4 POST message thiếu text
+# Expected response: 400 { "error": "text is required" }
+POST http://localhost:3456/channels/{{createChannel.response.body.id}}/messages
+Content-Type: application/json
+
+{}
+
+###
+
+### 3.5 GET messages — channel không tồn tại
+# Expected terminal:
+#   [DB] SELECT channel → NOT FOUND
+#   [ROUTER] channel "does-not-exist" NOT FOUND
+# Expected response: 404 { "error": "channel not found" }
 GET http://localhost:3456/channels/does-not-exist/messages
 
 ###
 
-### Unknown route
+### 3.6 POST message vào channel không tồn tại
+# Expected response: 404 { "error": "channel not found" }
+POST http://localhost:3456/channels/does-not-exist/messages
+Content-Type: application/json
+
+{"text": "This should fail"}
+
+###
+
+### 3.7 Body không phải JSON hợp lệ
+# Expected terminal:
+#   [ROUTER] body parse FAILED — invalid JSON
+# Expected response: 400 { "error": "invalid JSON" }
+POST http://localhost:3456/channels
+Content-Type: application/json
+
+not-valid-json
+
+###
+
+### 3.8 Route không tồn tại
+# Expected terminal:
+#   [ROUTER] no route matched for GET /foo
+# Expected response: 404 { "error": "not found" }
 GET http://localhost:3456/foo
+
+###
+
+### 3.9 Method không được hỗ trợ (DELETE)
+# Expected response: 404 { "error": "not found" }
+DELETE http://localhost:3456/channels/{{createChannel.response.body.id}}
+
+###
+
+
+# ═══════════════════════════════════════════════════════════════
+# NHÓM 4: PERSISTENCE — Dữ liệu tồn tại sau restart
+# ═══════════════════════════════════════════════════════════════
+# Cách test:
+#   1. Chạy request 1.2 → ghi nhớ số messages hiện tại
+#   2. Restart server: Ctrl+C → bun run dev
+#   3. Chạy lại 4.1 → messages vẫn còn nguyên
+
+### 4.1 GET messages — verify persistence sau restart
+GET http://localhost:3456/channels/{{createChannel.response.body.id}}/messages
+
+###
