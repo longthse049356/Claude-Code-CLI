@@ -47,26 +47,29 @@ export interface ToolDefinition {
   };
 }
 
-// --- Database Models (M2) ---
+// --- Database Models ---
 
 export interface Channel {
-  id: string;           // UUID
+  id: string;
   name: string;
-  created_at: number;   // Unix ms timestamp
+  created_at: number;
 }
 
 export interface DbMessage {
-  id: string;           // UUID
-  channel_id: string;   // FK → channels.id
+  id: string;
+  channel_id: string;
   text: string;
-  role: "user" | "agent"; // M2: always "user"
-  created_at: number;   // Unix ms timestamp
+  role: "user" | "assistant";   // was "user" | "agent" in M2 — fixed to match Claude API
+  created_at: number;
 }
 
 export interface Agent {
-  id: string;           // UUID
+  id: string;
   name: string;
-  channel_id: string;   // FK → channels.id
+  channel_id: string;
+  model: string;
+  system_prompt: string;
+  last_processed_at: number;    // Unix ms — cursor: messages before this are already processed
   created_at: number;
 }
 
@@ -80,12 +83,17 @@ export interface CreateMessageBody {
   text: string;
 }
 
+export interface CreateAgentBody {
+  name: string;
+  model?: string;
+  system_prompt?: string;
+}
+
 // --- WebSocket Broadcast ---
 
-export interface WsBroadcast {
-  type: "new_message";
-  data: DbMessage;
-}
+export type WsBroadcast =
+  | { type: "new_message"; data: DbMessage }
+  | { type: "typing"; data: { agent_name: string; channel_id: string } };
 
 // --- API Error Response ---
 
