@@ -202,3 +202,79 @@ DELETE http://localhost:3456/channels/{{createChannel.response.body.id}}
 GET http://localhost:3456/channels/{{createChannel.response.body.id}}/messages
 
 ###
+
+
+# ═══════════════════════════════════════════════════════════════
+# NHÓM 5: AGENT LOOP — M3 Agent loop endpoints
+# ═══════════════════════════════════════════════════════════════
+# Cách test:
+#   1. Chạy request 5.1 → add agent "claude" vào channel
+#   2. Chạy request 5.2 → send message, agent sẽ auto-reply
+#   3. Watch WebSocket để thấy typing event + reply
+#   4. Chạy request 5.3 → xóa agent, stop replying
+
+### 5.1 Add agent to channel
+# Expected terminal:
+#   [MANAGER] starting agent "claude" in channel "xxx"
+#   [WORKER] claude starting in channel "xxx"
+# Expected response: 201 { id, name, channel_id, model, system_prompt, last_processed_at, created_at }
+POST http://localhost:3456/channels/{{createChannel.response.body.id}}/agents
+Content-Type: application/json
+
+{"name": "claude"}
+
+###
+
+### 5.2 Add agent with custom config
+POST http://localhost:3456/channels/{{createChannel.response.body.id}}/agents
+Content-Type: application/json
+
+{
+  "name": "helper",
+  "model": "claude-haiku-4-5-20251001",
+  "system_prompt": "You are a helpful assistant. Be brief."
+}
+
+###
+
+### 5.3 Send message — agent will auto-reply within seconds
+# Expected terminal:
+#   [WORKER] polling messages after cursor=1776...
+#   [WORKER] found 1 new message(s)
+#   [LLM] calling Claude API...
+#   [LLM] received response
+#   [DB] INSERT message (assistant reply)
+#   [WS] broadcast new_message event to connected clients
+# Expected response: 201 { id, text, role: "user", ... }
+# Expected WebSocket:
+#   1. {"type":"typing",...} — agent is thinking
+#   2. {"type":"new_message","data":{"role":"assistant",...}} — reply
+POST http://localhost:3456/channels/{{createChannel.response.body.id}}/messages
+Content-Type: application/json
+
+{"text": "Hello! What is 2+2?"}
+
+###
+
+### 5.4 Get all messages — should include user + assistant messages
+GET http://localhost:3456/channels/{{createChannel.response.body.id}}/messages
+
+###
+
+### 5.5 Remove agent from channel
+# Expected terminal:
+#   [MANAGER] stopping agent "claude"
+#   [WORKER] agent stopped
+# Expected response: 200 { message: "agent stopped" }
+DELETE http://localhost:3456/channels/{{createChannel.response.body.id}}/agents/claude
+
+###
+
+### 5.6 Send message after agent deleted — NO auto-reply
+# Expected: agent does NOT reply
+POST http://localhost:3456/channels/{{createChannel.response.body.id}}/messages
+Content-Type: application/json
+
+{"text": "Agent should not reply now"}
+
+###
