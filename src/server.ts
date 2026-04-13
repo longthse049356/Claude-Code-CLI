@@ -1,8 +1,11 @@
 import { initDatabase } from "./server/database.ts";
 import { handleRequest } from "./server/router.ts";
 import { wsHandlers } from "./server/websocket.ts";
+import { resumeAll } from "./agent/worker-manager.ts";
 
 initDatabase();
+resumeAll();  // Restart any agents persisted in DB from previous runs
+
 
 Bun.serve({
   port: 3456,
