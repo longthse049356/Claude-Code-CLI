@@ -1,10 +1,16 @@
 import './App.css'
+import { ThemeToggle } from './components/ThemeToggle'
 
 function App() {
   return (
-    <div className="min-h-screen bg-background">
-      <h1 className="text-foreground p-6 text-3xl font-bold">M10 Lite UI</h1>
-      <p className="text-muted-foreground p-6">React + Vite + Shadcn/ui</p>
+    <div className="min-h-screen bg-background text-foreground">
+      <header className="border-b border-border p-4 flex justify-between items-center">
+        <h1 className="text-3xl font-bold">M10 Lite UI</h1>
+        <ThemeToggle />
+      </header>
+      <main className="p-6">
+        <p className="text-muted-foreground">React + Vite + Shadcn/ui</p>
+      </main>
     </div>
   )
 }
