@@ -1,5 +1,6 @@
 import { Database, type Statement } from "bun:sqlite";
 import type { Agent, Channel, DbMessage } from "../types.ts";
+import { log } from "./logger.ts";
 
 let db: Database;
 
@@ -92,40 +93,40 @@ export function initDatabase(path = "chat.db"): void {
     "SELECT * FROM agents WHERE channel_id = ? ORDER BY created_at ASC"
   );
 
-  console.log(`[DB] opened "${path}" with WAL mode`);
-  console.log(`[DB] prepared statements compiled`);
+  log(`[DB] opened "${path}" with WAL mode`);
+  log(`[DB] prepared statements compiled`);
 }
 
 export function createChannel(id: string, name: string, createdAt: number): void {
-  console.log(`[DB] INSERT channel — id="${id}" name="${name}"`);
+  log(`[DB] INSERT channel — id="${id}" name="${name}"`);
   stmtInsertChannel.run(id, name, createdAt);
-  console.log(`[DB] INSERT channel OK`);
+  log(`[DB] INSERT channel OK`);
 }
 
 export function getChannel(id: string): Channel | null {
-  console.log(`[DB] SELECT channel — id="${id}"`);
+  log(`[DB] SELECT channel — id="${id}"`);
   const result = stmtGetChannel.get(id) as Channel | null;
-  console.log(`[DB] SELECT channel → ${result ? `found: "${result.name}"` : "NOT FOUND"}`);
+  log(`[DB] SELECT channel → ${result ? `found: "${result.name}"` : "NOT FOUND"}`);
   return result;
 }
 
 export function createMessage(msg: DbMessage): void {
-  console.log(`[DB] INSERT message — id="${msg.id}" text="${msg.text}"`);
+  log(`[DB] INSERT message — id="${msg.id}" text="${msg.text}"`);
   stmtInsertMessage.run(msg.id, msg.channel_id, msg.text, msg.role, msg.created_at);
-  console.log(`[DB] INSERT message OK`);
+  log(`[DB] INSERT message OK`);
 }
 
 export function getMessagesByChannel(channelId: string): DbMessage[] {
-  console.log(`[DB] SELECT messages — channel_id="${channelId}"`);
+  log(`[DB] SELECT messages — channel_id="${channelId}"`);
   const results = stmtGetMessages.all(channelId) as DbMessage[];
-  console.log(`[DB] SELECT messages → ${results.length} row(s)`);
+  log(`[DB] SELECT messages → ${results.length} row(s)`);
   return results;
 }
 
 // --- Agent CRUD Functions ---
 
 export function createAgent(agent: Agent): void {
-  console.log(`[DB] INSERT agent — id="${agent.id}" name="${agent.name}" channel_id="${agent.channel_id}"`);
+  log(`[DB] INSERT agent — id="${agent.id}" name="${agent.name}" channel_id="${agent.channel_id}"`);
   stmtInsertAgent.run(
     agent.id,
     agent.name,
@@ -135,59 +136,59 @@ export function createAgent(agent: Agent): void {
     agent.last_processed_at,
     agent.created_at
   );
-  console.log(`[DB] INSERT agent OK`);
+  log(`[DB] INSERT agent OK`);
 }
 
 export function getAgent(id: string): Agent | null {
-  console.log(`[DB] SELECT agent — id="${id}"`);
+  log(`[DB] SELECT agent — id="${id}"`);
   const result = stmtGetAgent.get(id) as Agent | null;
-  console.log(`[DB] SELECT agent → ${result ? `found: "${result.name}"` : "NOT FOUND"}`);
+  log(`[DB] SELECT agent → ${result ? `found: "${result.name}"` : "NOT FOUND"}`);
   return result;
 }
 
 export function getAllAgents(): Agent[] {
-  console.log(`[DB] SELECT all agents`);
+  log(`[DB] SELECT all agents`);
   const results = stmtGetAllAgents.all() as Agent[];
-  console.log(`[DB] SELECT all agents → ${results.length} row(s)`);
+  log(`[DB] SELECT all agents → ${results.length} row(s)`);
   return results;
 }
 
 export function deleteAgent(id: string): void {
-  console.log(`[DB] DELETE agent — id="${id}"`);
+  log(`[DB] DELETE agent — id="${id}"`);
   stmtDeleteAgent.run(id);
-  console.log(`[DB] DELETE agent OK`);
+  log(`[DB] DELETE agent OK`);
 }
 
 export function updateAgentCursor(id: string, lastProcessedAt: number): void {
-  console.log(`[DB] UPDATE agent cursor — id="${id}" last_processed_at="${lastProcessedAt}"`);
+  log(`[DB] UPDATE agent cursor — id="${id}" last_processed_at="${lastProcessedAt}"`);
   stmtUpdateAgentCursor.run(lastProcessedAt, id);
-  console.log(`[DB] UPDATE agent cursor OK`);
+  log(`[DB] UPDATE agent cursor OK`);
 }
 
 export function getAgentByChannelAndName(channelId: string, name: string): Agent | null {
-  console.log(`[DB] SELECT agent — channel_id="${channelId}" name="${name}"`);
+  log(`[DB] SELECT agent — channel_id="${channelId}" name="${name}"`);
   const result = stmtGetAgentByChannelAndName.get(channelId, name) as Agent | null;
-  console.log(`[DB] SELECT agent → ${result ? `found: id="${result.id}"` : "NOT FOUND"}`);
+  log(`[DB] SELECT agent → ${result ? `found: id="${result.id}"` : "NOT FOUND"}`);
   return result;
 }
 
 export function getMessagesAfter(channelId: string, cursor: number): DbMessage[] {
-  console.log(`[DB] SELECT messages after cursor — channel_id="${channelId}" created_at>${cursor}`);
+  log(`[DB] SELECT messages after cursor — channel_id="${channelId}" created_at>${cursor}`);
   const results = stmtGetMessagesAfter.all(channelId, cursor) as DbMessage[];
-  console.log(`[DB] SELECT messages after cursor → ${results.length} row(s)`);
+  log(`[DB] SELECT messages after cursor → ${results.length} row(s)`);
   return results;
 }
 
 export function getAllChannels(): Channel[] {
-  console.log(`[DB] SELECT all channels`);
+  log(`[DB] SELECT all channels`);
   const results = stmtGetAllChannels.all() as Channel[];
-  console.log(`[DB] SELECT all channels → ${results.length} row(s)`);
+  log(`[DB] SELECT all channels → ${results.length} row(s)`);
   return results;
 }
 
 export function getAgentsByChannel(channelId: string): Agent[] {
-  console.log(`[DB] SELECT agents — channel_id="${channelId}"`);
+  log(`[DB] SELECT agents — channel_id="${channelId}"`);
   const results = stmtGetAgentsByChannel.all(channelId) as Agent[];
-  console.log(`[DB] SELECT agents → ${results.length} row(s)`);
+  log(`[DB] SELECT agents → ${results.length} row(s)`);
   return results;
 }
