@@ -7,6 +7,7 @@ import {
 import { broadcast } from "../server/websocket.ts";
 import { sendMessage } from "../providers/anthropic.ts";
 import { buildSystemPrompt } from "./system-prompt.ts";
+import { log } from "../server/logger.ts";
 import type { Agent, Message } from "../types.ts";
 
 export class WorkerLoop {
@@ -19,13 +20,13 @@ export class WorkerLoop {
 
   start(): void {
     this.running = true;
-    console.log(`[WORKER] ${this.agent.name} starting in channel "${this.agent.channel_id}"`);
+    log(`[WORKER] ${this.agent.name} starting in channel "${this.agent.channel_id}"`);
     this.tick();
   }
 
   stop(): void {
     this.running = false;
-    console.log(`[WORKER] ${this.agent.name} stopped`);
+    log(`[WORKER] ${this.agent.name} stopped`);
   }
 
   private async tick(): Promise<void> {
@@ -37,7 +38,7 @@ export class WorkerLoop {
       const userMessages = newMessages.filter((m) => m.role === "user");
 
       if (userMessages.length > 0) {
-        console.log(`[WORKER] ${this.agent.name} — ${userMessages.length} new user message(s), processing`);
+        log(`[WORKER] ${this.agent.name} — ${userMessages.length} new user message(s), processing`);
 
         // 2. Broadcast typing indicator
         broadcast({ type: "typing", data: { agent_name: this.agent.name, channel_id: this.agent.channel_id } });
@@ -69,7 +70,7 @@ export class WorkerLoop {
           .join("");
 
         if (!replyText.trim()) {
-          console.log(`[WORKER] ${this.agent.name} — LLM returned empty text, skipping reply`);
+          log(`[WORKER] ${this.agent.name} — LLM returned empty text, skipping reply`);
         } else {
           // 8. Save reply to DB and broadcast
           const reply = {
@@ -81,11 +82,11 @@ export class WorkerLoop {
           };
           createMessage(reply);
           broadcast({ type: "new_message", data: reply });
-          console.log(`[WORKER] ${this.agent.name} — replied: "${replyText.slice(0, 60)}..."`);
+          log(`[WORKER] ${this.agent.name} — replied: "${replyText.slice(0, 60)}..."`);
         }
       }
     } catch (err) {
-      console.error(`[WORKER] ${this.agent.name} error:`, err);
+      log(`[WORKER] ${this.agent.name} error:`, err);
       // Loop continues — error does not stop the worker
     }
 
