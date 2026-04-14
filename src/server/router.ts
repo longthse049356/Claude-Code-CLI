@@ -6,6 +6,8 @@ import {
   deleteAgent,
   getAgent,
   getAgentByChannelAndName,
+  getAgentsByChannel,
+  getAllChannels,
   getChannel,
   getMessagesByChannel,
 } from "./database.ts";
@@ -50,6 +52,14 @@ export async function handleRequest(req: Request): Promise<Response> {
     return json({ id, name: body.name.trim(), created_at } satisfies Channel, 201);
   }
 
+  // GET /channels — list all channels
+  if (req.method === "GET" && parts.length === 1 && parts[0] === "channels") {
+    console.log(`[ROUTER] matched: GET /channels`);
+    const channels = getAllChannels();
+    console.log(`[ROUTER] returning ${channels.length} channel(s)`);
+    return json({ channels });
+  }
+
   // GET /channels/:id/messages — list messages in a channel
   if (
     req.method === "GET" &&
@@ -69,6 +79,27 @@ export async function handleRequest(req: Request): Promise<Response> {
     const messages = getMessagesByChannel(channelId);
     console.log(`[ROUTER] returning ${messages.length} message(s)`);
     return json(messages);
+  }
+
+  // GET /channels/:id/agents — list agents in a channel
+  if (
+    req.method === "GET" &&
+    parts.length === 3 &&
+    parts[0] === "channels" &&
+    parts[2] === "agents"
+  ) {
+    const channelId = parts[1];
+    console.log(`[ROUTER] matched: GET /channels/:id/agents — channelId="${channelId}"`);
+
+    const channel = getChannel(channelId);
+    if (!channel) {
+      console.log(`[ROUTER] channel "${channelId}" NOT FOUND`);
+      return json({ error: "channel not found" } satisfies ApiError, 404);
+    }
+
+    const agents = getAgentsByChannel(channelId);
+    console.log(`[ROUTER] returning ${agents.length} agent(s)`);
+    return json({ agents });
   }
 
   // POST /channels/:id/messages — send a message to a channel
