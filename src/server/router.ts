@@ -230,7 +230,26 @@ export async function handleRequest(req: Request): Promise<Response> {
     return json({ message: "agent stopped" }, 200);
   }
 
-  // No route matched
+  // Serve static files from packages/ui/dist/
+  console.log(`[ROUTER] attempting to serve static file: ${url.pathname}`);
+  const filePath = `packages/ui/dist${url.pathname.split("?")[0]}`;
+
+  const file = Bun.file(filePath);
+  if (await file.exists()) {
+    console.log(`[ROUTER] serving static file: ${filePath}`);
+    return new Response(file);
+  }
+
+  // If no file found, try index.html for SPA routing
+  const indexFile = Bun.file("packages/ui/dist/index.html");
+  if (await indexFile.exists()) {
+    console.log(`[ROUTER] serving index.html for SPA routing`);
+    return new Response(indexFile, {
+      headers: { "Content-Type": "text/html" },
+    });
+  }
+
+  // No route or file matched
   console.log(`[ROUTER] no route matched for ${req.method} ${url.pathname}`);
   return json({ error: "not found" } satisfies ApiError, 404);
 }
