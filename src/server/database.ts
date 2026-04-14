@@ -15,6 +15,8 @@ let stmtDeleteAgent!: Statement;
 let stmtUpdateAgentCursor!: Statement;
 let stmtGetAgentByChannelAndName!: Statement;
 let stmtGetMessagesAfter!: Statement;
+let stmtGetAllChannels!: Statement;
+let stmtGetAgentsByChannel!: Statement;
 
 const SCHEMA = `
   CREATE TABLE IF NOT EXISTS channels (
@@ -82,6 +84,12 @@ export function initDatabase(path = "chat.db"): void {
   );
   stmtGetMessagesAfter = db.prepare(
     "SELECT * FROM messages WHERE channel_id = ? AND created_at > ? ORDER BY created_at ASC"
+  );
+  stmtGetAllChannels = db.prepare(
+    "SELECT * FROM channels ORDER BY created_at ASC"
+  );
+  stmtGetAgentsByChannel = db.prepare(
+    "SELECT * FROM agents WHERE channel_id = ? ORDER BY created_at ASC"
   );
 
   console.log(`[DB] opened "${path}" with WAL mode`);
@@ -167,5 +175,19 @@ export function getMessagesAfter(channelId: string, cursor: number): DbMessage[]
   console.log(`[DB] SELECT messages after cursor — channel_id="${channelId}" created_at>${cursor}`);
   const results = stmtGetMessagesAfter.all(channelId, cursor) as DbMessage[];
   console.log(`[DB] SELECT messages after cursor → ${results.length} row(s)`);
+  return results;
+}
+
+export function getAllChannels(): Channel[] {
+  console.log(`[DB] SELECT all channels`);
+  const results = stmtGetAllChannels.all() as Channel[];
+  console.log(`[DB] SELECT all channels → ${results.length} row(s)`);
+  return results;
+}
+
+export function getAgentsByChannel(channelId: string): Agent[] {
+  console.log(`[DB] SELECT agents — channel_id="${channelId}"`);
+  const results = stmtGetAgentsByChannel.all(channelId) as Agent[];
+  console.log(`[DB] SELECT agents → ${results.length} row(s)`);
   return results;
 }
