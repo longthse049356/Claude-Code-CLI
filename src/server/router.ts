@@ -232,7 +232,9 @@ export async function handleRequest(req: Request): Promise<Response> {
 
   // Serve static files from packages/ui/dist/
   console.log(`[ROUTER] attempting to serve static file: ${url.pathname}`);
-  const filePath = `packages/ui/dist${url.pathname.split("?")[0]}`;
+  const baseDir = import.meta.dir;
+  const uiDistDir = `${baseDir}/../packages/ui/dist`;
+  const filePath = `${uiDistDir}${url.pathname.split("?")[0]}`;
 
   const file = Bun.file(filePath);
   if (await file.exists()) {
@@ -241,7 +243,7 @@ export async function handleRequest(req: Request): Promise<Response> {
   }
 
   // If no file found, try index.html for SPA routing
-  const indexFile = Bun.file("packages/ui/dist/index.html");
+  const indexFile = Bun.file(`${uiDistDir}/index.html`);
   if (await indexFile.exists()) {
     console.log(`[ROUTER] serving index.html for SPA routing`);
     return new Response(indexFile, {
