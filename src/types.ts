@@ -93,7 +93,8 @@ export interface CreateAgentBody {
 
 export type WsBroadcast =
   | { type: "new_message"; data: DbMessage }
-  | { type: "typing"; data: { agent_name: string; channel_id: string } };
+  | { type: "typing"; data: { agent_name: string; channel_id: string } }
+  | { type: "log"; data: string };
 
 // --- API Error Response ---
 

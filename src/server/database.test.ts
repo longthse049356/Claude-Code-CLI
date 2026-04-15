@@ -2,6 +2,7 @@ import { beforeEach, expect, test } from "bun:test";
 import {
   createChannel,
   createMessage,
+  getAllChannels,
   getChannel,
   getMessagesByChannel,
   initDatabase,
@@ -67,6 +68,7 @@ import {
   getAllAgents,
   getAgent,
   getAgentByChannelAndName,
+  getAgentsByChannel,
   getMessagesAfter,
   updateAgentCursor,
 } from "./database.ts";
@@ -140,4 +142,36 @@ test("getMessagesAfter returns only messages after cursor", () => {
 test("getMessagesAfter returns empty array when no new messages", () => {
   createChannel("ch-1", "general", 1000);
   expect(getMessagesAfter("ch-1", 9999)).toEqual([]);
+});
+
+// --- getAllChannels ---
+
+test("getAllChannels returns all channels ordered by created_at ASC", () => {
+  createChannel("ch-2", "random",  2000);
+  createChannel("ch-1", "general", 1000);
+  const channels = getAllChannels();
+  expect(channels).toHaveLength(2);
+  expect(channels[0].id).toBe("ch-1");
+  expect(channels[1].id).toBe("ch-2");
+});
+
+test("getAllChannels returns empty array when no channels", () => {
+  expect(getAllChannels()).toEqual([]);
+});
+
+// --- getAgentsByChannel ---
+
+test("getAgentsByChannel returns agents for a specific channel", () => {
+  createChannel("ch-1", "general", 1000);
+  createChannel("ch-2", "random",  2000);
+  createAgent({ ...AGENT, id: "a-1", channel_id: "ch-1", name: "bot1" });
+  createAgent({ ...AGENT, id: "a-2", channel_id: "ch-2", name: "bot2" });
+  const agents = getAgentsByChannel("ch-1");
+  expect(agents).toHaveLength(1);
+  expect(agents[0].id).toBe("a-1");
+});
+
+test("getAgentsByChannel returns empty array when channel has no agents", () => {
+  createChannel("ch-1", "general", 1000);
+  expect(getAgentsByChannel("ch-1")).toEqual([]);
 });

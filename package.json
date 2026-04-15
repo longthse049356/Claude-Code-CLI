@@ -3,7 +3,11 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "bun run src/server.ts"
+    "dev": "bun --parallel dev:server dev:ui",
+    "dev:server": "bun run src/server.ts",
+    "dev:ui": "cd packages/ui && bun run dev",
+    "build:ui": "cd packages/ui && bun run build",
+    "start": "bun run src/server.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.87.0"

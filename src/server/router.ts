@@ -6,15 +6,18 @@ import {
   deleteAgent,
   getAgent,
   getAgentByChannelAndName,
+  getAgentsByChannel,
+  getAllChannels,
   getChannel,
   getMessagesByChannel,
 } from "./database.ts";
 import { broadcast } from "./websocket.ts";
 import { startAgent, stopAgent } from "../agent/worker-manager.ts";
 import { DEFAULT_MODEL } from "../providers/anthropic.ts";
+import { log } from "./logger.ts";
 
 function json(data: unknown, status = 200): Response {
-  console.log(`[ROUTER] → response ${status}: ${JSON.stringify(data)}`);
+  log(`[ROUTER] → response ${status}: ${JSON.stringify(data)}`);
   return new Response(JSON.stringify(data), {
     status,
     headers: { "Content-Type": "application/json" },
@@ -27,19 +30,19 @@ export async function handleRequest(req: Request): Promise<Response> {
 
   // POST /channels — create a new channel
   if (req.method === "POST" && parts.length === 1 && parts[0] === "channels") {
-    console.log(`[ROUTER] matched: POST /channels`);
+    log(`[ROUTER] matched: POST /channels`);
 
     let body: CreateChannelBody;
     try {
       body = (await req.json()) as CreateChannelBody;
-      console.log(`[ROUTER] body: ${JSON.stringify(body)}`);
+      log(`[ROUTER] body: ${JSON.stringify(body)}`);
     } catch {
-      console.log(`[ROUTER] body parse FAILED — invalid JSON`);
+      log(`[ROUTER] body parse FAILED — invalid JSON`);
       return json({ error: "invalid JSON" } satisfies ApiError, 400);
     }
 
     if (!body.name || body.name.trim() === "") {
-      console.log(`[ROUTER] validation FAILED — name is required`);
+      log(`[ROUTER] validation FAILED — name is required`);
       return json({ error: "name is required" } satisfies ApiError, 400);
     }
 
@@ -50,6 +53,14 @@ export async function handleRequest(req: Request): Promise<Response> {
     return json({ id, name: body.name.trim(), created_at } satisfies Channel, 201);
   }
 
+  // GET /channels — list all channels
+  if (req.method === "GET" && parts.length === 1 && parts[0] === "channels") {
+    log(`[ROUTER] matched: GET /channels`);
+    const channels = getAllChannels();
+    log(`[ROUTER] returning ${channels.length} channel(s)`);
+    return json({ channels });
+  }
+
   // GET /channels/:id/messages — list messages in a channel
   if (
     req.method === "GET" &&
@@ -58,17 +69,38 @@ export async function handleRequest(req: Request): Promise<Response> {
     parts[2] === "messages"
   ) {
     const channelId = parts[1];
-    console.log(`[ROUTER] matched: GET /channels/:id/messages — channelId="${channelId}"`);
+    log(`[ROUTER] matched: GET /channels/:id/messages — channelId="${channelId}"`);
 
     const channel = getChannel(channelId);
     if (!channel) {
-      console.log(`[ROUTER] channel "${channelId}" NOT FOUND`);
+      log(`[ROUTER] channel "${channelId}" NOT FOUND`);
       return json({ error: "channel not found" } satisfies ApiError, 404);
     }
 
     const messages = getMessagesByChannel(channelId);
-    console.log(`[ROUTER] returning ${messages.length} message(s)`);
+    log(`[ROUTER] returning ${messages.length} message(s)`);
     return json(messages);
+  }
+
+  // GET /channels/:id/agents — list agents in a channel
+  if (
+    req.method === "GET" &&
+    parts.length === 3 &&
+    parts[0] === "channels" &&
+    parts[2] === "agents"
+  ) {
+    const channelId = parts[1];
+    log(`[ROUTER] matched: GET /channels/:id/agents — channelId="${channelId}"`);
+
+    const channel = getChannel(channelId);
+    if (!channel) {
+      log(`[ROUTER] channel "${channelId}" NOT FOUND`);
+      return json({ error: "channel not found" } satisfies ApiError, 404);
+    }
+
+    const agents = getAgentsByChannel(channelId);
+    log(`[ROUTER] returning ${agents.length} agent(s)`);
+    return json({ agents });
   }
 
   // POST /channels/:id/messages — send a message to a channel
@@ -79,25 +111,25 @@ export async function handleRequest(req: Request): Promise<Response> {
     parts[2] === "messages"
   ) {
     const channelId = parts[1];
-    console.log(`[ROUTER] matched: POST /channels/:id/messages — channelId="${channelId}"`);
+    log(`[ROUTER] matched: POST /channels/:id/messages — channelId="${channelId}"`);
 
     let body: CreateMessageBody;
     try {
       body = (await req.json()) as CreateMessageBody;
-      console.log(`[ROUTER] body: ${JSON.stringify(body)}`);
+      log(`[ROUTER] body: ${JSON.stringify(body)}`);
     } catch {
-      console.log(`[ROUTER] body parse FAILED — invalid JSON`);
+      log(`[ROUTER] body parse FAILED — invalid JSON`);
       return json({ error: "invalid JSON" } satisfies ApiError, 400);
     }
 
     if (!body.text || body.text.trim() === "") {
-      console.log(`[ROUTER] validation FAILED — text is required`);
+      log(`[ROUTER] validation FAILED — text is required`);
       return json({ error: "text is required" } satisfies ApiError, 400);
     }
 
     const channel = getChannel(channelId);
     if (!channel) {
-      console.log(`[ROUTER] channel "${channelId}" NOT FOUND`);
+      log(`[ROUTER] channel "${channelId}" NOT FOUND`);
       return json({ error: "channel not found" } satisfies ApiError, 404);
     }
 
@@ -110,7 +142,7 @@ export async function handleRequest(req: Request): Promise<Response> {
     };
 
     createMessage(msg);
-    console.log(`[ROUTER] broadcasting to WS clients...`);
+    log(`[ROUTER] broadcasting to WS clients...`);
     broadcast({ type: "new_message", data: msg });
 
     return json(msg, 201);
@@ -124,31 +156,31 @@ export async function handleRequest(req: Request): Promise<Response> {
     parts[2] === "agents"
   ) {
     const channelId = parts[1];
-    console.log(`[ROUTER] matched: POST /channels/:id/agents — channelId="${channelId}"`);
+    log(`[ROUTER] matched: POST /channels/:id/agents — channelId="${channelId}"`);
 
     let body: CreateAgentBody;
     try {
       body = (await req.json()) as CreateAgentBody;
-      console.log(`[ROUTER] body: ${JSON.stringify(body)}`);
+      log(`[ROUTER] body: ${JSON.stringify(body)}`);
     } catch {
-      console.log(`[ROUTER] body parse FAILED — invalid JSON`);
+      log(`[ROUTER] body parse FAILED — invalid JSON`);
       return json({ error: "invalid JSON" } satisfies ApiError, 400);
     }
 
     if (!body.name || body.name.trim() === "") {
-      console.log(`[ROUTER] validation FAILED — name is required`);
+      log(`[ROUTER] validation FAILED — name is required`);
       return json({ error: "name is required" } satisfies ApiError, 400);
     }
 
     const channel = getChannel(channelId);
     if (!channel) {
-      console.log(`[ROUTER] channel "${channelId}" NOT FOUND`);
+      log(`[ROUTER] channel "${channelId}" NOT FOUND`);
       return json({ error: "channel not found" } satisfies ApiError, 404);
     }
 
     const existing = getAgentByChannelAndName(channelId, body.name.trim());
     if (existing) {
-      console.log(`[ROUTER] agent "${body.name.trim()}" already exists in channel "${channelId}"`);
+      log(`[ROUTER] agent "${body.name.trim()}" already exists in channel "${channelId}"`);
       return json({ error: "agent already exists" } satisfies ApiError, 409);
     }
 
@@ -164,7 +196,7 @@ export async function handleRequest(req: Request): Promise<Response> {
 
     createAgent(agent);
     startAgent(agent);
-    console.log(`[ROUTER] agent "${agent.name}" created and started`);
+    log(`[ROUTER] agent "${agent.name}" created and started`);
 
     return json(agent, 201);
   }
@@ -178,28 +210,49 @@ export async function handleRequest(req: Request): Promise<Response> {
   ) {
     const channelId = parts[1];
     const agentName = parts[3];
-    console.log(`[ROUTER] matched: DELETE /channels/:id/agents/:name — channelId="${channelId}" name="${agentName}"`);
+    log(`[ROUTER] matched: DELETE /channels/:id/agents/:name — channelId="${channelId}" name="${agentName}"`);
 
     const channel = getChannel(channelId);
     if (!channel) {
-      console.log(`[ROUTER] channel "${channelId}" NOT FOUND`);
+      log(`[ROUTER] channel "${channelId}" NOT FOUND`);
       return json({ error: "channel not found" } satisfies ApiError, 404);
     }
 
     const agent = getAgentByChannelAndName(channelId, agentName);
     if (!agent) {
-      console.log(`[ROUTER] agent "${agentName}" NOT FOUND in channel "${channelId}"`);
+      log(`[ROUTER] agent "${agentName}" NOT FOUND in channel "${channelId}"`);
       return json({ error: "agent not found" } satisfies ApiError, 404);
     }
 
     stopAgent(agent.id);
     deleteAgent(agent.id);
-    console.log(`[ROUTER] agent "${agentName}" stopped and deleted`);
+    log(`[ROUTER] agent "${agentName}" stopped and deleted`);
 
     return json({ message: "agent stopped" }, 200);
   }
 
-  // No route matched
-  console.log(`[ROUTER] no route matched for ${req.method} ${url.pathname}`);
+  // Serve static files from packages/ui/dist/
+  log(`[ROUTER] attempting to serve static file: ${url.pathname}`);
+  const baseDir = import.meta.dir;
+  const uiDistDir = `${baseDir}/../packages/ui/dist`;
+  const filePath = `${uiDistDir}${url.pathname.split("?")[0]}`;
+
+  const file = Bun.file(filePath);
+  if (await file.exists()) {
+    log(`[ROUTER] serving static file: ${filePath}`);
+    return new Response(file);
+  }
+
+  // If no file found, try index.html for SPA routing
+  const indexFile = Bun.file(`${uiDistDir}/index.html`);
+  if (await indexFile.exists()) {
+    log(`[ROUTER] serving index.html for SPA routing`);
+    return new Response(indexFile, {
+      headers: { "Content-Type": "text/html" },
+    });
+  }
+
+  // No route or file matched
+  log(`[ROUTER] no route matched for ${req.method} ${url.pathname}`);
   return json({ error: "not found" } satisfies ApiError, 404);
 }
