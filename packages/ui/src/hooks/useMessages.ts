@@ -3,15 +3,13 @@ import type { DbMessage } from "../types";
 import { useWsStore } from "../stores/useWsStore";
 import { useEffect } from "react";
 
-const API_URL = "http://localhost:3456";
-
 export function useMessages(channelId: string | null) {
   const { setMessages } = useWsStore();
 
   const query = useQuery({
     queryKey: ["messages", channelId],
     queryFn: async () => {
-      const res = await fetch(`${API_URL}/channels/${channelId}/messages`);
+      const res = await fetch(`/channels/${channelId}/messages`);
       const data = (await res.json()) as { messages: DbMessage[] };
       return data.messages;
     },

@@ -3,8 +3,6 @@ import { useMessages } from "../hooks/useMessages";
 import { useAppStore } from "../stores/useAppStore";
 import { useWsStore } from "../stores/useWsStore";
 
-const API_URL = "http://localhost:3456";
-
 export function ChatPanel() {
   const { selectedChannelId } = useAppStore();
   const { data: messages = [], isLoading } = useMessages(selectedChannelId);
@@ -21,7 +19,7 @@ export function ChatPanel() {
     if (!inputValue.trim() || !selectedChannelId) return;
 
     try {
-      await fetch(`${API_URL}/channels/${selectedChannelId}/messages`, {
+      await fetch(`/channels/${selectedChannelId}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: inputValue.trim() }),
