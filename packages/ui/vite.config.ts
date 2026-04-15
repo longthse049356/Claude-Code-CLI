@@ -10,4 +10,13 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  server: {
+    proxy: {
+      '/channels': 'http://localhost:3456',
+      '/ws': {
+        target: 'ws://localhost:3456',
+        ws: true,
+      },
+    },
+  },
 })

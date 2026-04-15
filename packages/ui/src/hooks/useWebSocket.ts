@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { useWsStore } from "../stores/useWsStore";
 import type { WsBroadcast } from "../types";
 
-export function useWebSocket(url: string = "ws://localhost:3456/ws") {
+export function useWebSocket(url: string = `ws://${location.host}/ws`) {
   const { setConnected, addMessage, addTypingAgent, removeTypingAgent, addLog } =
     useWsStore();
 

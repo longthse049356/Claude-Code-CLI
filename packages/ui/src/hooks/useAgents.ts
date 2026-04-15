@@ -1,13 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Agent } from "../types";
 
-const API_URL = "http://localhost:3456";
-
 export function useAgents(channelId: string | null) {
   return useQuery({
     queryKey: ["agents", channelId],
     queryFn: async () => {
-      const res = await fetch(`${API_URL}/channels/${channelId}/agents`);
+      const res = await fetch(`/channels/${channelId}/agents`);
       const data = (await res.json()) as { agents: Agent[] };
       return data.agents;
     },
@@ -25,7 +23,7 @@ export function useAddAgent() {
       channelId: string;
       name: string;
     }) => {
-      const res = await fetch(`${API_URL}/channels/${channelId}/agents`, {
+      const res = await fetch(`/channels/${channelId}/agents`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name }),
@@ -48,7 +46,7 @@ export function useRemoveAgent() {
       channelId: string;
       agentId: string;
     }) => {
-      await fetch(`${API_URL}/channels/${channelId}/agents/${agentId}`, {
+      await fetch(`/channels/${channelId}/agents/${agentId}`, {
         method: "DELETE",
       });
     },
