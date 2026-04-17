@@ -24,7 +24,7 @@ export function extractTextDelta(event: unknown): string | null {
 }
 
 export async function streamTextDeltas(
-  stream: AsyncIterable<unknown>,
+  stream: AsyncIterable<unknown> | Iterable<unknown>,
   onDelta: (chunk: string) => void | Promise<void>
 ): Promise<void> {
   for await (const event of stream) {
@@ -35,23 +35,8 @@ export async function streamTextDeltas(
   }
 }
 
-export async function sendMessage(
-  messages: Message[],
-  options?: {
-    model?: string;
-    maxTokens?: number;
-    tools?: ToolDefinition[];
-    systemPrompt?: string;
-    signal?: AbortSignal;
-  }
-): Promise<StreamResult> {
-  const model = options?.model ?? DEFAULT_MODEL;
-  const maxTokens = options?.maxTokens ?? 4096;
-  const tools = options?.tools ?? [];
-  const systemPrompt = options?.systemPrompt ?? "";
-  const signal = options?.signal;
-
-  const apiMessages = messages.map((msg) => {
+function toApiMessages(messages: Message[]): Anthropic.MessageParam[] {
+  return messages.map((msg) => {
     if (msg.role === "user") {
       return { role: "user" as const, content: msg.content };
     }
@@ -70,13 +55,66 @@ export async function sendMessage(
       }),
     };
   });
+}
+
+export async function streamMessage(
+  messages: Message[],
+  options?: {
+    model?: string;
+    maxTokens?: number;
+    systemPrompt?: string;
+    signal?: AbortSignal;
+    onDelta?: (chunk: string) => void | Promise<void>;
+  }
+): Promise<{ text: string }> {
+  const model = options?.model ?? DEFAULT_MODEL;
+  const maxTokens = options?.maxTokens ?? 4096;
+  const systemPrompt = options?.systemPrompt ?? "";
+  const signal = options?.signal;
+
+  const llmStream = client.messages.stream(
+    {
+      model,
+      max_tokens: maxTokens,
+      system: systemPrompt,
+      messages: toApiMessages(messages),
+    },
+    signal ? { signal } : undefined
+  );
+
+  let fullText = "";
+  await streamTextDeltas(llmStream as AsyncIterable<unknown>, async (chunk) => {
+    fullText += chunk;
+    if (options?.onDelta) {
+      await options.onDelta(chunk);
+    }
+  });
+
+  return { text: fullText };
+}
+
+export async function sendMessage(
+  messages: Message[],
+  options?: {
+    model?: string;
+    maxTokens?: number;
+    tools?: ToolDefinition[];
+    systemPrompt?: string;
+    signal?: AbortSignal;
+  }
+): Promise<StreamResult> {
+  const model = options?.model ?? DEFAULT_MODEL;
+  const maxTokens = options?.maxTokens ?? 4096;
+  const tools = options?.tools ?? [];
+  const systemPrompt = options?.systemPrompt ?? "";
+  const signal = options?.signal;
 
   const stream = client.messages.stream(
     {
       model,
       max_tokens: maxTokens,
       system: systemPrompt,
-      messages: apiMessages,
+      messages: toApiMessages(messages),
       // Only include tools field when tools are actually defined
       ...(tools.length > 0 ? { tools: tools as Anthropic.Tool[] } : {}),
     },

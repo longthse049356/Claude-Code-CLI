@@ -23,7 +23,7 @@ import {
 import { broadcast } from "./websocket.ts";
 import { startAgent, stopAgent } from "../agent/worker-manager.ts";
 import { buildSystemPrompt } from "../agent/system-prompt.ts";
-import { DEFAULT_MODEL, streamTextDeltas } from "../providers/anthropic.ts";
+import { DEFAULT_MODEL, streamMessage } from "../providers/anthropic.ts";
 import { log } from "./logger.ts";
 
 function json(data: unknown, status = 200): Response {
@@ -195,43 +195,12 @@ export async function handleRequest(req: Request): Promise<Response> {
             },
           });
 
-          const anthropic = await import("@anthropic-ai/sdk");
-          const client = new anthropic.default({
-            apiKey: process.env.ANTHROPIC_API_KEY,
-            ...(process.env.ANTHROPIC_BASE_URL ? { baseURL: process.env.ANTHROPIC_BASE_URL } : {}),
-          });
-
-          const apiMessages = history.map((msg) => {
-            if (msg.role === "user") {
-              return { role: "user" as const, content: msg.content };
-            }
-            return {
-              role: "assistant" as const,
-              content: msg.content.map((block) => {
-                if (block.type === "text") {
-                  return { type: "text" as const, text: block.text };
-                }
-                return {
-                  type: "tool_use" as const,
-                  id: block.id,
-                  name: block.name,
-                  input: block.input,
-                };
-              }),
-            };
-          });
-
-          const llmStream = client.messages.stream({
+          const { text: fullText } = await streamMessage(history, {
             model: agent.model || DEFAULT_MODEL,
-            max_tokens: 4096,
-            system: buildSystemPrompt(agent.name, agent.system_prompt),
-            messages: apiMessages,
-          });
-
-          let fullText = "";
-          await streamTextDeltas(llmStream as AsyncIterable<unknown>, async (chunk) => {
-            fullText += chunk;
-            send({ type: "assistant_delta", data: { chunk } });
+            systemPrompt: buildSystemPrompt(agent.name, agent.system_prompt),
+            onDelta: async (chunk) => {
+              send({ type: "assistant_delta", data: { chunk } });
+            },
           });
 
           const assistantMsg: DbMessage = {
