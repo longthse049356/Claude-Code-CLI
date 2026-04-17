@@ -9,6 +9,32 @@ const client = new Anthropic({
   ...(process.env.ANTHROPIC_BASE_URL ? { baseURL: process.env.ANTHROPIC_BASE_URL } : {}),
 });
 
+export function extractTextDelta(event: unknown): string | null {
+  if (!event || typeof event !== "object") return null;
+
+  const maybeEvent = event as {
+    type?: string;
+    delta?: { type?: string; text?: unknown };
+  };
+
+  if (maybeEvent.type !== "content_block_delta") return null;
+  if (!maybeEvent.delta || maybeEvent.delta.type !== "text_delta") return null;
+
+  return typeof maybeEvent.delta.text === "string" ? maybeEvent.delta.text : null;
+}
+
+export async function streamTextDeltas(
+  stream: AsyncIterable<unknown>,
+  onDelta: (chunk: string) => void | Promise<void>
+): Promise<void> {
+  for await (const event of stream) {
+    const chunk = extractTextDelta(event);
+    if (chunk !== null) {
+      await onDelta(chunk);
+    }
+  }
+}
+
 export async function sendMessage(
   messages: Message[],
   options?: {
