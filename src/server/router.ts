@@ -26,6 +26,10 @@ import { buildSystemPrompt } from "../agent/system-prompt.ts";
 import { DEFAULT_MODEL, streamMessage } from "../providers/anthropic.ts";
 import { log } from "./logger.ts";
 
+export const routerDeps = {
+  streamMessage,
+};
+
 function json(data: unknown, status = 200): Response {
   log(`[ROUTER] → response ${status}: ${JSON.stringify(data)}`);
   return new Response(JSON.stringify(data), {
@@ -165,16 +169,42 @@ export async function handleRequest(req: Request): Promise<Response> {
     broadcast({ type: "new_message", data: userMsg });
 
     const encoder = new TextEncoder();
+    const requestSignal = req.signal;
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
-        const send = (event: SseChatEvent) => {
-          controller.enqueue(
-            encoder.encode(`event: ${event.type}\ndata: ${JSON.stringify(event.data)}\n\n`)
-          );
+        let closed = false;
+
+        const close = () => {
+          if (closed) return;
+          closed = true;
+          try {
+            controller.close();
+          } catch {
+            // Stream can already be closed/cancelled by client disconnect.
+          }
         };
 
+        const send = (event: SseChatEvent): boolean => {
+          if (closed || requestSignal.aborted) return false;
+          try {
+            controller.enqueue(
+              encoder.encode(`event: ${event.type}\ndata: ${JSON.stringify(event.data)}\n\n`)
+            );
+            return true;
+          } catch {
+            closed = true;
+            return false;
+          }
+        };
+
+        const onAbort = () => {
+          close();
+        };
+
+        requestSignal.addEventListener("abort", onAbort, { once: true });
+
         try {
-          send({ type: "user_message_saved", data: userMsg });
+          if (!send({ type: "user_message_saved", data: userMsg })) return;
 
           const history = getMessagesByChannel(channelId).map((m): Message =>
             m.role === "user"
@@ -185,23 +215,30 @@ export async function handleRequest(req: Request): Promise<Response> {
           const assistantId = crypto.randomUUID();
           const assistantCreatedAt = Date.now();
 
-          send({
-            type: "assistant_start",
-            data: {
-              id: assistantId,
-              channel_id: channelId,
-              agent_name: agent.name,
-              created_at: assistantCreatedAt,
-            },
-          });
+          if (
+            !send({
+              type: "assistant_start",
+              data: {
+                id: assistantId,
+                channel_id: channelId,
+                agent_name: agent.name,
+                created_at: assistantCreatedAt,
+              },
+            })
+          ) {
+            return;
+          }
 
-          const { text: fullText } = await streamMessage(history, {
+          const { text: fullText } = await routerDeps.streamMessage(history, {
             model: agent.model || DEFAULT_MODEL,
             systemPrompt: buildSystemPrompt(agent.name, agent.system_prompt),
+            signal: requestSignal,
             onDelta: async (chunk) => {
               send({ type: "assistant_delta", data: { chunk } });
             },
           });
+
+          if (closed || requestSignal.aborted) return;
 
           const assistantMsg: DbMessage = {
             id: assistantId,
@@ -216,9 +253,12 @@ export async function handleRequest(req: Request): Promise<Response> {
           broadcast({ type: "new_message", data: assistantMsg });
           send({ type: "assistant_done", data: assistantMsg });
         } catch (error) {
-          send({ type: "error", data: { message: String(error) } });
+          if (!requestSignal.aborted) {
+            send({ type: "error", data: { message: String(error) } });
+          }
         } finally {
-          controller.close();
+          requestSignal.removeEventListener("abort", onAbort);
+          close();
         }
       },
     });
