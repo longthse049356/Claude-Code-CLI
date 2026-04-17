@@ -4,23 +4,28 @@ import { useWsStore } from "../stores/useWsStore";
 import { useEffect } from "react";
 
 export function useMessages(channelId: string | null) {
-  const { setMessages } = useWsStore();
+  const { setMessages, messages } = useWsStore();
 
   const query = useQuery({
     queryKey: ["messages", channelId],
     queryFn: async () => {
       const res = await fetch(`/channels/${channelId}/messages`);
-      const data = (await res.json()) as { messages: DbMessage[] };
-      return data.messages;
+      return (await res.json()) as DbMessage[];
     },
     enabled: !!channelId,
   });
 
+  // Seed the store with REST data on initial load / channel switch
   useEffect(() => {
     if (query.data) {
       setMessages(query.data);
     }
   }, [query.data, setMessages]);
 
-  return query;
+  // Return live store messages filtered by channel — these update via WebSocket
+  const channelMessages = channelId
+    ? messages.filter((m) => m.channel_id === channelId)
+    : [];
+
+  return { data: channelMessages, isLoading: query.isLoading };
 }

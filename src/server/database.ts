@@ -31,6 +31,7 @@ const SCHEMA = `
     channel_id TEXT    NOT NULL,
     text       TEXT    NOT NULL,
     role       TEXT    NOT NULL DEFAULT 'user',
+    agent_name TEXT    NOT NULL DEFAULT '',
     created_at INTEGER NOT NULL,
     FOREIGN KEY (channel_id) REFERENCES channels(id)
   );
@@ -52,6 +53,14 @@ export function initDatabase(path = "chat.db"): void {
   db.exec("PRAGMA journal_mode = WAL;");
   db.exec(SCHEMA);
 
+  // Migration: add agent_name column if it doesn't exist yet (for existing databases)
+  try {
+    db.exec("ALTER TABLE messages ADD COLUMN agent_name TEXT NOT NULL DEFAULT ''");
+    log(`[DB] migration: added agent_name column to messages`);
+  } catch {
+    // Column already exists — safe to ignore
+  }
+
   // Compile statements once here
   stmtInsertChannel = db.prepare(
     "INSERT INTO channels (id, name, created_at) VALUES (?, ?, ?)"
@@ -60,7 +69,7 @@ export function initDatabase(path = "chat.db"): void {
     "SELECT * FROM channels WHERE id = ?"
   );
   stmtInsertMessage = db.prepare(
-    "INSERT INTO messages (id, channel_id, text, role, created_at) VALUES (?, ?, ?, ?, ?)"
+    "INSERT INTO messages (id, channel_id, text, role, agent_name, created_at) VALUES (?, ?, ?, ?, ?, ?)"
   );
   stmtGetMessages = db.prepare(
     "SELECT * FROM messages WHERE channel_id = ? ORDER BY created_at ASC"
@@ -112,7 +121,7 @@ export function getChannel(id: string): Channel | null {
 
 export function createMessage(msg: DbMessage): void {
   log(`[DB] INSERT message — id="${msg.id}" text="${msg.text}"`);
-  stmtInsertMessage.run(msg.id, msg.channel_id, msg.text, msg.role, msg.created_at);
+  stmtInsertMessage.run(msg.id, msg.channel_id, msg.text, msg.role, msg.agent_name, msg.created_at);
   log(`[DB] INSERT message OK`);
 }
 
@@ -173,9 +182,7 @@ export function getAgentByChannelAndName(channelId: string, name: string): Agent
 }
 
 export function getMessagesAfter(channelId: string, cursor: number): DbMessage[] {
-  log(`[DB] SELECT messages after cursor — channel_id="${channelId}" created_at>${cursor}`);
   const results = stmtGetMessagesAfter.all(channelId, cursor) as DbMessage[];
-  log(`[DB] SELECT messages after cursor → ${results.length} row(s)`);
   return results;
 }
 

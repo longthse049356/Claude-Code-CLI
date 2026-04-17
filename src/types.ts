@@ -59,7 +59,8 @@ export interface DbMessage {
   id: string;
   channel_id: string;
   text: string;
-  role: "user" | "assistant";   // was "user" | "agent" in M2 — fixed to match Claude API
+  role: "user" | "assistant";
+  agent_name: string;            // "" for user messages, agent name for assistant replies
   created_at: number;
 }
 
@@ -93,8 +94,7 @@ export interface CreateAgentBody {
 
 export type WsBroadcast =
   | { type: "new_message"; data: DbMessage }
-  | { type: "typing"; data: { agent_name: string; channel_id: string } }
-  | { type: "log"; data: string };
+  | { type: "typing"; data: { agent_name: string; channel_id: string } };
 
 // --- API Error Response ---
 

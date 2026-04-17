@@ -9,19 +9,21 @@ export interface Agent {
   id: string;
   name: string;
   channel_id: string;
-  cursor: number;
+  model: string;
+  system_prompt: string;
+  last_processed_at: number;
   created_at: number;
 }
 
 export interface DbMessage {
   id: string;
   channel_id: string;
-  agent_name: string;
   text: string;
+  role: "user" | "assistant";
+  agent_name: string;
   created_at: number;
 }
 
 export type WsBroadcast =
   | { type: "new_message"; data: DbMessage }
-  | { type: "typing"; data: { agent_name: string; channel_id: string } }
-  | { type: "log"; data: string };
+  | { type: "typing"; data: { agent_name: string; channel_id: string } };

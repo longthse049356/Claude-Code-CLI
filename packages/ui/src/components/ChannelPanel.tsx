@@ -1,6 +1,8 @@
 import { useState } from "react";
+import { Hash, Plus, Loader2 } from "lucide-react";
 import { useChannels, useCreateChannel } from "../hooks/useChannels";
 import { useAppStore } from "../stores/useAppStore";
+import { cn } from "../lib/utils";
 
 export function ChannelPanel() {
   const { data: channels = [], isLoading } = useChannels();
@@ -17,44 +19,70 @@ export function ChannelPanel() {
   };
 
   return (
-    <div className="flex flex-col h-full border-r dark:border-slate-800">
-      <div className="p-4 border-b dark:border-slate-800">
-        <h2 className="text-lg font-semibold mb-2">Channels</h2>
-        <form onSubmit={handleCreateChannel} className="flex gap-2">
+    <div
+      className="flex flex-col h-full border-r border-border"
+      style={{ backgroundColor: "hsl(var(--sidebar))" }}
+    >
+      <div className="p-4 border-b border-border">
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+          Channels
+        </h2>
+        <form onSubmit={handleCreateChannel} className="flex gap-1.5">
           <input
             type="text"
             value={newChannelName}
             onChange={(e) => setNewChannelName(e.target.value)}
             placeholder="New channel..."
-            className="flex-1 px-2 py-1 text-sm border rounded dark:bg-slate-900 dark:border-slate-700"
+            className="flex-1 px-2.5 py-1.5 text-sm rounded-md border border-input bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
           />
           <button
             type="submit"
-            disabled={createChannel.isPending}
-            className="px-2 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+            disabled={createChannel.isPending || !newChannelName.trim()}
+            className="p-1.5 rounded-md bg-primary text-primary-foreground hover:opacity-90 transition-opacity disabled:opacity-40"
           >
-            +
+            {createChannel.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Plus className="h-4 w-4" />
+            )}
           </button>
         </form>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
-        {isLoading && <p className="p-4 text-sm text-slate-500">Loading...</p>}
-        {channels.map((channel) => (
-          <button
-            key={channel.id}
-            onClick={() => setSelectedChannel(channel.id)}
-            className={`w-full text-left px-4 py-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-800 ${
-              selectedChannelId === channel.id
-                ? "bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-400"
-                : ""
-            }`}
-          >
-            # {channel.name}
-          </button>
-        ))}
+      <div className="flex-1 overflow-y-auto py-1">
+        {isLoading && (
+          <div className="flex justify-center py-4">
+            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+          </div>
+        )}
+        {channels.map((channel) => {
+          const isActive = selectedChannelId === channel.id;
+          return (
+            <button
+              key={channel.id}
+              onClick={() => setSelectedChannel(channel.id)}
+              className={cn(
+                "w-full flex items-center gap-2 px-4 py-2 text-sm transition-colors border-l-2",
+                isActive
+                  ? "border-l-[hsl(var(--sidebar-active-foreground))] font-medium"
+                  : "border-l-transparent hover:bg-accent"
+              )}
+              style={
+                isActive
+                  ? {
+                      backgroundColor: "hsl(var(--sidebar-active))",
+                      color: "hsl(var(--sidebar-active-foreground))",
+                    }
+                  : { color: "hsl(var(--sidebar-foreground))" }
+              }
+            >
+              <Hash className="h-4 w-4 flex-shrink-0 opacity-60" />
+              <span className="truncate">{channel.name}</span>
+            </button>
+          );
+        })}
         {channels.length === 0 && !isLoading && (
-          <p className="p-4 text-sm text-slate-500">No channels yet</p>
+          <p className="p-4 text-sm text-muted-foreground text-center">No channels yet</p>
         )}
       </div>
     </div>

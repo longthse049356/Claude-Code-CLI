@@ -138,6 +138,7 @@ export async function handleRequest(req: Request): Promise<Response> {
       channel_id: channelId,
       text: body.text.trim(),
       role: "user",
+      agent_name: "",
       created_at: Date.now(),
     };
 

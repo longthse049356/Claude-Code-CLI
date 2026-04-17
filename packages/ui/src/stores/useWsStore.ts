@@ -12,10 +12,6 @@ interface WsState {
   typingAgents: Set<string>; // "channel_id:agent_name"
   addTypingAgent: (channel_id: string, agent_name: string) => void;
   removeTypingAgent: (channel_id: string, agent_name: string) => void;
-
-  logs: string[];
-  addLog: (log: string) => void;
-  clearLogs: () => void;
 }
 
 export const useWsStore = create<WsState>((set) => ({
@@ -39,8 +35,4 @@ export const useWsStore = create<WsState>((set) => ({
       newSet.delete(`${channel_id}:${agent_name}`);
       return { typingAgents: newSet };
     }),
-
-  logs: [],
-  addLog: (log) => set((state) => ({ logs: [...state.logs, log] })),
-  clearLogs: () => set({ logs: [] }),
 }));
