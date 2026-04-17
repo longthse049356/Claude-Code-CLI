@@ -1,10 +1,19 @@
-import type { Agent, ApiError, Channel, CreateAgentBody, CreateChannelBody, CreateMessageBody, DbMessage } from "../types.ts";
+import type {
+  Agent,
+  ApiError,
+  Channel,
+  CreateAgentBody,
+  CreateChannelBody,
+  CreateMessageBody,
+  DbMessage,
+  Message,
+  SseChatEvent,
+} from "../types.ts";
 import {
   createAgent,
   createChannel,
   createMessage,
   deleteAgent,
-  getAgent,
   getAgentByChannelAndName,
   getAgentsByChannel,
   getAllChannels,
@@ -13,7 +22,8 @@ import {
 } from "./database.ts";
 import { broadcast } from "./websocket.ts";
 import { startAgent, stopAgent } from "../agent/worker-manager.ts";
-import { DEFAULT_MODEL } from "../providers/anthropic.ts";
+import { buildSystemPrompt } from "../agent/system-prompt.ts";
+import { DEFAULT_MODEL, streamTextDeltas } from "../providers/anthropic.ts";
 import { log } from "./logger.ts";
 
 function json(data: unknown, status = 200): Response {
@@ -101,6 +111,157 @@ export async function handleRequest(req: Request): Promise<Response> {
     const agents = getAgentsByChannel(channelId);
     log(`[ROUTER] returning ${agents.length} agent(s)`);
     return json({ agents });
+  }
+
+  // POST /channels/:id/messages/stream — send message and stream assistant response via SSE
+  if (
+    req.method === "POST" &&
+    parts.length === 4 &&
+    parts[0] === "channels" &&
+    parts[2] === "messages" &&
+    parts[3] === "stream"
+  ) {
+    const channelId = parts[1];
+    log(`[ROUTER] matched: POST /channels/:id/messages/stream — channelId="${channelId}"`);
+
+    let body: CreateMessageBody;
+    try {
+      body = (await req.json()) as CreateMessageBody;
+      log(`[ROUTER] body: ${JSON.stringify(body)}`);
+    } catch {
+      log(`[ROUTER] body parse FAILED — invalid JSON`);
+      return json({ error: "invalid JSON" } satisfies ApiError, 400);
+    }
+
+    if (!body.text || body.text.trim() === "") {
+      log(`[ROUTER] validation FAILED — text is required`);
+      return json({ error: "text is required" } satisfies ApiError, 400);
+    }
+
+    const channel = getChannel(channelId);
+    if (!channel) {
+      log(`[ROUTER] channel "${channelId}" NOT FOUND`);
+      return json({ error: "channel not found" } satisfies ApiError, 404);
+    }
+
+    const agents = getAgentsByChannel(channelId);
+    if (agents.length === 0) {
+      log(`[ROUTER] no agents in channel "${channelId}"`);
+      return json({ error: "no agents in channel" } satisfies ApiError, 400);
+    }
+
+    const agent = agents[0];
+    const now = Date.now();
+    const userMsg: DbMessage = {
+      id: crypto.randomUUID(),
+      channel_id: channelId,
+      text: body.text.trim(),
+      role: "user",
+      created_at: now,
+    };
+
+    createMessage(userMsg);
+    log(`[ROUTER] broadcasting user message to WS clients...`);
+    broadcast({ type: "new_message", data: userMsg });
+
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        const send = (event: SseChatEvent) => {
+          controller.enqueue(
+            encoder.encode(`event: ${event.type}\ndata: ${JSON.stringify(event.data)}\n\n`)
+          );
+        };
+
+        try {
+          send({ type: "user_message_saved", data: userMsg });
+
+          const history = getMessagesByChannel(channelId).map((m): Message =>
+            m.role === "user"
+              ? { role: "user", content: m.text }
+              : { role: "assistant", content: [{ type: "text", text: m.text }] }
+          );
+
+          const assistantId = crypto.randomUUID();
+          const assistantCreatedAt = Date.now();
+
+          send({
+            type: "assistant_start",
+            data: {
+              id: assistantId,
+              channel_id: channelId,
+              agent_name: agent.name,
+              created_at: assistantCreatedAt,
+            },
+          });
+
+          const anthropic = await import("@anthropic-ai/sdk");
+          const client = new anthropic.default({
+            apiKey: process.env.ANTHROPIC_API_KEY,
+            ...(process.env.ANTHROPIC_BASE_URL ? { baseURL: process.env.ANTHROPIC_BASE_URL } : {}),
+          });
+
+          const apiMessages = history.map((msg) => {
+            if (msg.role === "user") {
+              return { role: "user" as const, content: msg.content };
+            }
+            return {
+              role: "assistant" as const,
+              content: msg.content.map((block) => {
+                if (block.type === "text") {
+                  return { type: "text" as const, text: block.text };
+                }
+                return {
+                  type: "tool_use" as const,
+                  id: block.id,
+                  name: block.name,
+                  input: block.input,
+                };
+              }),
+            };
+          });
+
+          const llmStream = client.messages.stream({
+            model: agent.model || DEFAULT_MODEL,
+            max_tokens: 4096,
+            system: buildSystemPrompt(agent.name, agent.system_prompt),
+            messages: apiMessages,
+          });
+
+          let fullText = "";
+          await streamTextDeltas(llmStream as AsyncIterable<unknown>, async (chunk) => {
+            fullText += chunk;
+            send({ type: "assistant_delta", data: { chunk } });
+          });
+
+          const assistantMsg: DbMessage = {
+            id: assistantId,
+            channel_id: channelId,
+            text: fullText,
+            role: "assistant",
+            created_at: assistantCreatedAt,
+          };
+
+          createMessage(assistantMsg);
+          log(`[ROUTER] broadcasting assistant message to WS clients...`);
+          broadcast({ type: "new_message", data: assistantMsg });
+          send({ type: "assistant_done", data: assistantMsg });
+        } catch (error) {
+          send({ type: "error", data: { message: String(error) } });
+        } finally {
+          controller.close();
+        }
+      },
+    });
+
+    return new Response(stream, {
+      status: 200,
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+      },
+    });
   }
 
   // POST /channels/:id/messages — send a message to a channel
