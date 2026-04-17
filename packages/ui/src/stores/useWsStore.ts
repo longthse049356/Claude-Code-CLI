@@ -8,6 +8,15 @@ interface WsState {
   messages: DbMessage[];
   addMessage: (msg: DbMessage) => void;
   setMessages: (msgs: DbMessage[]) => void;
+  startAssistantDraft: (draft: {
+    id: string;
+    channel_id: string;
+    agent_name: string;
+    created_at: number;
+  }) => void;
+  appendAssistantDraft: (id: string, chunk: string) => void;
+  finalizeAssistantDraft: (msg: DbMessage) => void;
+  failAssistantDraft: (id: string) => void;
 
   typingAgents: Set<string>; // "channel_id:agent_name"
   addTypingAgent: (channel_id: string, agent_name: string) => void;
@@ -25,6 +34,35 @@ export const useWsStore = create<WsState>((set) => ({
   messages: [],
   addMessage: (msg) => set((state) => ({ messages: [...state.messages, msg] })),
   setMessages: (msgs) => set({ messages: msgs }),
+  startAssistantDraft: (draft) =>
+    set((state) => ({
+      messages: [
+        ...state.messages,
+        {
+          id: draft.id,
+          channel_id: draft.channel_id,
+          agent_name: draft.agent_name,
+          text: "",
+          created_at: draft.created_at,
+        },
+      ],
+    })),
+  appendAssistantDraft: (id, chunk) =>
+    set((state) => ({
+      messages: state.messages.map((msg) =>
+        msg.id === id ? { ...msg, text: msg.text + chunk } : msg
+      ),
+    })),
+  finalizeAssistantDraft: (msg) =>
+    set((state) => ({
+      messages: state.messages.map((existing) =>
+        existing.id === msg.id ? msg : existing
+      ),
+    })),
+  failAssistantDraft: (id) =>
+    set((state) => ({
+      messages: state.messages.filter((msg) => msg.id !== id),
+    })),
 
   typingAgents: new Set(),
   addTypingAgent: (channel_id, agent_name) =>

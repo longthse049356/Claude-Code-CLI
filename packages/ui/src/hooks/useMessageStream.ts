@@ -1,6 +1,6 @@
 import { useCallback, useRef } from "react";
 import { useWsStore } from "../stores/useWsStore";
-import type { ChatSseEvent, DbMessage } from "../types";
+import type { ChatSseEvent } from "../types";
 
 function parseSseEvent(rawChunk: string): ChatSseEvent | null {
   const blocks = rawChunk.split("\n\n");
@@ -29,10 +29,14 @@ function parseSseEvent(rawChunk: string): ChatSseEvent | null {
   return null;
 }
 
-export function useMessageStream() {
+export function useMessageStream(channelId: string | null) {
   const addMessage = useWsStore((state) => state.addMessage);
   const addLog = useWsStore((state) => state.addLog);
-  const assistantDraftRef = useRef<DbMessage | null>(null);
+  const startAssistantDraft = useWsStore((state) => state.startAssistantDraft);
+  const appendAssistantDraft = useWsStore((state) => state.appendAssistantDraft);
+  const finalizeAssistantDraft = useWsStore((state) => state.finalizeAssistantDraft);
+  const failAssistantDraft = useWsStore((state) => state.failAssistantDraft);
+  const activeDraftIdRef = useRef<string | null>(null);
 
   const dispatchEvent = useCallback(
     (event: ChatSseEvent) => {
@@ -42,44 +46,54 @@ export function useMessageStream() {
       }
 
       if (event.type === "assistant_start") {
-        assistantDraftRef.current = {
-          id: event.data.id,
-          channel_id: event.data.channel_id,
-          role: "assistant",
-          text: "",
-          created_at: event.data.created_at,
-        };
+        startAssistantDraft(event.data);
+        activeDraftIdRef.current = event.data.id;
         return;
       }
 
       if (event.type === "assistant_delta") {
-        if (assistantDraftRef.current) {
-          assistantDraftRef.current = {
-            ...assistantDraftRef.current,
-            text: assistantDraftRef.current.text + event.data.chunk,
-          };
+        if (activeDraftIdRef.current) {
+          appendAssistantDraft(activeDraftIdRef.current, event.data.chunk);
         }
         return;
       }
 
       if (event.type === "assistant_done") {
-        addMessage(event.data);
-        assistantDraftRef.current = null;
+        finalizeAssistantDraft(event.data);
+        activeDraftIdRef.current = null;
         return;
       }
 
       if (event.type === "error") {
+        if (activeDraftIdRef.current) {
+          failAssistantDraft(activeDraftIdRef.current);
+          activeDraftIdRef.current = null;
+        }
         addLog(`[SSE] ${event.data.message}`);
       }
     },
-    [addLog, addMessage]
+    [
+      addLog,
+      addMessage,
+      appendAssistantDraft,
+      failAssistantDraft,
+      finalizeAssistantDraft,
+      startAssistantDraft,
+    ]
   );
 
-  const streamMessage = useCallback(
-    async (channelId: string, text: string, signal?: AbortSignal) => {
+  const sendStreamMessage = useCallback(
+    async (text: string, signal?: AbortSignal) => {
+      if (!channelId) {
+        throw new Error("Cannot stream message without an active channel");
+      }
+
       const response = await fetch(`/channels/${channelId}/messages/stream`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "text/event-stream",
+        },
         body: JSON.stringify({ text }),
         signal,
       });
@@ -120,8 +134,8 @@ export function useMessageStream() {
         }
       }
     },
-    [dispatchEvent]
+    [channelId, dispatchEvent]
   );
 
-  return { streamMessage };
+  return { sendStreamMessage };
 }
