@@ -4,12 +4,16 @@ import { useWsStore } from "../stores/useWsStore";
 import { useEffect } from "react";
 
 export function useMessages(channelId: string | null) {
-  const { setMessages } = useWsStore();
+  const setMessages = useWsStore((state) => state.setMessages);
 
   const query = useQuery({
     queryKey: ["messages", channelId],
     queryFn: async () => {
       const res = await fetch(`/channels/${channelId}/messages`);
+      if (!res.ok) {
+        throw new Error(`Failed to load messages: ${res.status}`);
+      }
+
       const data = (await res.json()) as { messages: DbMessage[] };
       return data.messages;
     },
@@ -17,10 +21,10 @@ export function useMessages(channelId: string | null) {
   });
 
   useEffect(() => {
-    if (query.data) {
-      setMessages(query.data);
+    if (channelId && query.data) {
+      setMessages(channelId, query.data);
     }
-  }, [query.data, setMessages]);
+  }, [channelId, query.data, setMessages]);
 
   return query;
 }

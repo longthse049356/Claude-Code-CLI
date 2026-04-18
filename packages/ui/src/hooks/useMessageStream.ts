@@ -1,32 +1,95 @@
-import { useCallback, useRef } from "react";
+import { useCallback } from "react";
 import { useWsStore } from "../stores/useWsStore";
 import type { ChatSseEvent } from "../types";
 
-function parseSseEvent(rawChunk: string): ChatSseEvent | null {
-  const blocks = rawChunk.split("\n\n");
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
 
-  for (const block of blocks) {
-    const trimmed = block.trim();
-    if (!trimmed) continue;
+function isDbMessageData(data: unknown): data is Extract<ChatSseEvent, { type: "assistant_done" }>['data'] {
+  return (
+    isRecord(data) &&
+    typeof data.id === "string" &&
+    typeof data.channel_id === "string" &&
+    typeof data.agent_name === "string" &&
+    typeof data.text === "string" &&
+    typeof data.created_at === "number"
+  );
+}
 
-    const lines = trimmed.split("\n");
-    const eventLine = lines.find((line) => line.startsWith("event: "));
-    const dataLine = lines.find((line) => line.startsWith("data: "));
+function isAssistantStartData(
+  data: unknown
+): data is Extract<ChatSseEvent, { type: "assistant_start" }>['data'] {
+  return (
+    isRecord(data) &&
+    typeof data.id === "string" &&
+    typeof data.channel_id === "string" &&
+    typeof data.agent_name === "string" &&
+    typeof data.created_at === "number"
+  );
+}
 
-    if (!eventLine || !dataLine) continue;
+function isAssistantDeltaData(
+  data: unknown
+): data is Extract<ChatSseEvent, { type: "assistant_delta" }>['data'] {
+  return isRecord(data) && typeof data.chunk === "string";
+}
 
-    const type = eventLine.slice("event: ".length).trim();
-    const dataText = dataLine.slice("data: ".length);
+function isErrorData(data: unknown): data is Extract<ChatSseEvent, { type: "error" }>['data'] {
+  return isRecord(data) && typeof data.message === "string";
+}
 
-    try {
-      const data = JSON.parse(dataText) as ChatSseEvent["data"];
-      return { type, data } as ChatSseEvent;
-    } catch {
-      return null;
-    }
+function parseChatSseEvent(type: string, data: unknown): ChatSseEvent | null {
+  if (type === "user_message_saved" && isDbMessageData(data)) {
+    return { type, data };
+  }
+
+  if (type === "assistant_start" && isAssistantStartData(data)) {
+    return { type, data };
+  }
+
+  if (type === "assistant_delta" && isAssistantDeltaData(data)) {
+    return { type, data };
+  }
+
+  if (type === "assistant_done" && isDbMessageData(data)) {
+    return { type, data };
+  }
+
+  if (type === "error" && isErrorData(data)) {
+    return { type, data };
   }
 
   return null;
+}
+
+function parseSseEvent(block: string): ChatSseEvent | null {
+  const normalized = block.replaceAll("\r\n", "\n").trim();
+  if (!normalized) return null;
+
+  const lines = normalized.split("\n");
+  let eventType: string | null = null;
+  const dataLines: string[] = [];
+
+  for (const line of lines) {
+    if (line.startsWith("event:")) {
+      eventType = line.slice("event:".length).trim();
+      continue;
+    }
+
+    if (line.startsWith("data:")) {
+      dataLines.push(line.slice("data:".length).trimStart());
+    }
+  }
+
+  if (!eventType || dataLines.length === 0) return null;
+
+  try {
+    const data = JSON.parse(dataLines.join("\n"));
+    return parseChatSseEvent(eventType, data);
+  } catch {
+    return null;
+  }
 }
 
 export function useMessageStream(channelId: string | null) {
@@ -36,51 +99,6 @@ export function useMessageStream(channelId: string | null) {
   const appendAssistantDraft = useWsStore((state) => state.appendAssistantDraft);
   const finalizeAssistantDraft = useWsStore((state) => state.finalizeAssistantDraft);
   const failAssistantDraft = useWsStore((state) => state.failAssistantDraft);
-  const activeDraftIdRef = useRef<string | null>(null);
-
-  const dispatchEvent = useCallback(
-    (event: ChatSseEvent) => {
-      if (event.type === "user_message_saved") {
-        addMessage(event.data);
-        return;
-      }
-
-      if (event.type === "assistant_start") {
-        startAssistantDraft(event.data);
-        activeDraftIdRef.current = event.data.id;
-        return;
-      }
-
-      if (event.type === "assistant_delta") {
-        if (activeDraftIdRef.current) {
-          appendAssistantDraft(activeDraftIdRef.current, event.data.chunk);
-        }
-        return;
-      }
-
-      if (event.type === "assistant_done") {
-        finalizeAssistantDraft(event.data);
-        activeDraftIdRef.current = null;
-        return;
-      }
-
-      if (event.type === "error") {
-        if (activeDraftIdRef.current) {
-          failAssistantDraft(activeDraftIdRef.current);
-          activeDraftIdRef.current = null;
-        }
-        addLog(`[SSE] ${event.data.message}`);
-      }
-    },
-    [
-      addLog,
-      addMessage,
-      appendAssistantDraft,
-      failAssistantDraft,
-      finalizeAssistantDraft,
-      startAssistantDraft,
-    ]
-  );
 
   const sendStreamMessage = useCallback(
     async (text: string, signal?: AbortSignal) => {
@@ -106,35 +124,95 @@ export function useMessageStream(channelId: string | null) {
         throw new Error("Missing response body for SSE stream");
       }
 
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
+      let activeDraftId: string | null = null;
+      const dispatchEvent = (event: ChatSseEvent) => {
+        if (event.type === "user_message_saved") {
+          addMessage(event.data);
+          return;
+        }
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+        if (event.type === "assistant_start") {
+          startAssistantDraft(event.data);
+          activeDraftId = event.data.id;
+          return;
+        }
 
-        buffer += decoder.decode(value, { stream: true });
+        if (event.type === "assistant_delta") {
+          if (activeDraftId) {
+            appendAssistantDraft(activeDraftId, event.data.chunk);
+          }
+          return;
+        }
 
-        const parts = buffer.split("\n\n");
-        buffer = parts.pop() ?? "";
+        if (event.type === "assistant_done") {
+          finalizeAssistantDraft(event.data);
+          activeDraftId = null;
+          return;
+        }
 
-        for (const part of parts) {
-          const event = parseSseEvent(part + "\n\n");
-          if (event) {
-            dispatchEvent(event);
+        if (activeDraftId) {
+          failAssistantDraft(activeDraftId);
+          activeDraftId = null;
+        }
+        addLog(`[SSE] ${event.data.message}`);
+      };
+
+      try {
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+
+          const parts = buffer.split(/\r?\n\r?\n/);
+          buffer = parts.pop() ?? "";
+
+          for (const part of parts) {
+            const event = parseSseEvent(part);
+            if (event) {
+              dispatchEvent(event);
+            }
           }
         }
-      }
 
-      if (buffer.trim()) {
-        const lastEvent = parseSseEvent(buffer + "\n\n");
-        if (lastEvent) {
-          dispatchEvent(lastEvent);
+        buffer += decoder.decode();
+        if (buffer.trim()) {
+          const parts = buffer.split(/\r?\n\r?\n/);
+          for (const part of parts) {
+            const event = parseSseEvent(part);
+            if (event) {
+              dispatchEvent(event);
+            }
+          }
         }
+
+        if (activeDraftId) {
+          failAssistantDraft(activeDraftId);
+          addLog("[SSE] Stream ended before assistant_done");
+          activeDraftId = null;
+        }
+      } catch (error) {
+        if (activeDraftId) {
+          failAssistantDraft(activeDraftId);
+          activeDraftId = null;
+        }
+
+        throw error;
       }
     },
-    [channelId, dispatchEvent]
+    [
+      addLog,
+      addMessage,
+      appendAssistantDraft,
+      channelId,
+      failAssistantDraft,
+      finalizeAssistantDraft,
+      startAssistantDraft,
+    ]
   );
 
   return { sendStreamMessage };

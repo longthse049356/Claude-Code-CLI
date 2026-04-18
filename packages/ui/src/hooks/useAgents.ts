@@ -41,12 +41,12 @@ export function useRemoveAgent() {
   return useMutation({
     mutationFn: async ({
       channelId,
-      agentId,
+      agentName,
     }: {
       channelId: string;
-      agentId: string;
+      agentName: string;
     }) => {
-      await fetch(`/channels/${channelId}/agents/${agentId}`, {
+      await fetch(`/channels/${channelId}/agents/${encodeURIComponent(agentName)}`, {
         method: "DELETE",
       });
     },

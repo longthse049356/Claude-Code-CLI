@@ -1,9 +1,14 @@
 import { useState } from "react";
 import { useAgents, useAddAgent, useRemoveAgent } from "../hooks/useAgents";
 import { useAppStore } from "../stores/useAppStore";
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import { Badge } from "./ui/badge";
+import { ScrollArea } from "./ui/scroll-area";
+import { Separator } from "./ui/separator";
 
 export function AgentPanel() {
-  const { selectedChannelId } = useAppStore();
+  const selectedChannelId = useAppStore((state) => state.selectedChannelId);
   const { data: agents = [], isLoading } = useAgents(selectedChannelId);
   const addAgent = useAddAgent();
   const removeAgent = useRemoveAgent();
@@ -11,21 +16,18 @@ export function AgentPanel() {
 
   const handleAddAgent = (e: React.FormEvent) => {
     e.preventDefault();
-    if (newAgentName.trim() && selectedChannelId) {
-      addAgent.mutate({ channelId: selectedChannelId, name: newAgentName.trim() });
-      setNewAgentName("");
-    }
-  };
+    const name = newAgentName.trim();
+    if (!name || !selectedChannelId) return;
 
-  const handleRemoveAgent = (agentId: string) => {
-    if (selectedChannelId) {
-      removeAgent.mutate({ channelId: selectedChannelId, agentId });
-    }
+    addAgent.mutate(
+      { channelId: selectedChannelId, name },
+      { onSuccess: () => setNewAgentName("") }
+    );
   };
 
   if (!selectedChannelId) {
     return (
-      <div className="flex items-center justify-center h-full text-sm text-slate-500">
+      <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
         Select a channel to manage agents
       </div>
     );
@@ -33,46 +35,49 @@ export function AgentPanel() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="p-3 border-b dark:border-slate-800">
-        <h3 className="text-sm font-semibold mb-2">Agents</h3>
+      <div className="p-3 border-b border-border">
+        <div className="mb-2 flex items-center justify-between">
+          <h3 className="text-sm font-semibold">Agents</h3>
+          <Badge variant="outline">{agents.length}</Badge>
+        </div>
+
         <form onSubmit={handleAddAgent} className="flex gap-2">
-          <input
-            type="text"
+          <Input
             value={newAgentName}
             onChange={(e) => setNewAgentName(e.target.value)}
             placeholder="Agent name..."
-            className="flex-1 px-2 py-1 text-sm border rounded dark:bg-slate-900 dark:border-slate-700"
           />
-          <button
-            type="submit"
-            disabled={addAgent.isPending}
-            className="px-2 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
-          >
+          <Button type="submit" size="sm" disabled={addAgent.isPending}>
             +
-          </button>
+          </Button>
         </form>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
-        {isLoading && <p className="p-3 text-sm text-slate-500">Loading...</p>}
-        {agents.map((agent) => (
-          <div
-            key={agent.id}
-            className="flex items-center justify-between px-3 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-800"
-          >
-            <span>{agent.name}</span>
-            <button
-              onClick={() => handleRemoveAgent(agent.id)}
-              className="text-red-500 hover:text-red-700 text-xs"
-            >
-              ✕
-            </button>
+      <ScrollArea className="flex-1">
+        {isLoading && <p className="p-3 text-sm text-muted-foreground">Loading...</p>}
+
+        {!isLoading && agents.length === 0 && (
+          <p className="p-3 text-sm text-muted-foreground">No agents in this channel</p>
+        )}
+
+        {agents.map((agent, index) => (
+          <div key={agent.id}>
+            <div className="flex items-center justify-between px-3 py-2 text-sm">
+              <span>{agent.name}</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() =>
+                  removeAgent.mutate({ channelId: selectedChannelId, agentName: agent.name })
+                }
+              >
+                ✕
+              </Button>
+            </div>
+            {index < agents.length - 1 && <Separator />}
           </div>
         ))}
-        {agents.length === 0 && !isLoading && (
-          <p className="p-3 text-sm text-slate-500">No agents in this channel</p>
-        )}
-      </div>
+      </ScrollArea>
     </div>
   );
 }
