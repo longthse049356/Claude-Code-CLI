@@ -8,6 +8,11 @@ import { useAppStore } from "../stores/useAppStore";
 import { readSseStream } from "../lib/sse";
 import { cn } from "../lib/utils";
 import type { DbMessage } from "../types";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { TypingIndicator } from "./typing-indicator";
+import { ConnectionStatusIndicator } from "./connection-status";
+import type { ConnectionStatus } from "./connection-status";
 
 function formatTime(timestamp: number): string {
   return new Intl.DateTimeFormat("en", {
@@ -39,6 +44,7 @@ export function ChatPanel() {
   const [isSending, setIsSending] = useState(false);
   const [optimisticUserMessage, setOptimisticUserMessage] = useState<DbMessage | null>(null);
   const [draftAssistant, setDraftAssistant] = useState<DraftAssistantState | null>(null);
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("connected");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -46,6 +52,7 @@ export function ChatPanel() {
   }, [messages, optimisticUserMessage, draftAssistant]);
 
   const streamMessage = async (channelId: string, userText: string) => {
+    setConnectionStatus("connecting");
     const res = await fetch(`/channels/${channelId}/messages/stream`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -53,6 +60,7 @@ export function ChatPanel() {
     });
 
     if (!res.ok) {
+      setConnectionStatus("error");
       let message = `Failed to send message (${res.status})`;
       try {
         const payload = (await res.json()) as { error?: string };
@@ -93,6 +101,7 @@ export function ChatPanel() {
 
       if (event === "done") {
         doneReceived = true;
+        setConnectionStatus("connected");
         setDraftAssistant(null);
         setOptimisticUserMessage(null);
         await queryClient.invalidateQueries({ queryKey: ["messages", channelId] });
@@ -102,6 +111,7 @@ export function ChatPanel() {
 
       if (event === "error") {
         errorReceived = true;
+        setConnectionStatus("error");
         setDraftAssistant((prev) => {
           if (!prev || prev.channelId !== channelId) return prev;
           return {
@@ -196,6 +206,10 @@ export function ChatPanel() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden bg-background">
+      <div className="flex items-center justify-between px-4 py-2 border-b border-border">
+        <span className="text-xs font-medium text-muted-foreground">Messages</span>
+        <ConnectionStatusIndicator status={connectionStatus} />
+      </div>
       <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">
         {isLoading && (
           <div className="flex items-center justify-center py-8">
@@ -235,7 +249,7 @@ export function ChatPanel() {
                 <div
                   className={cn(
                     "px-3 py-2 rounded-xl text-sm leading-relaxed",
-                    isUser ? "rounded-tr-sm" : "rounded-tl-sm"
+                    isUser ? "rounded-tr-sm" : "rounded-tl-sm border-l-2 border-l-primary"
                   )}
                   style={
                     isUser
@@ -281,22 +295,24 @@ export function ChatPanel() {
                   color: "hsl(var(--bubble-assistant-foreground))",
                 }}
               >
-                <MarkdownText
-                  text={draftAssistant.text || (draftAssistant.status === "streaming" ? "..." : "(empty response)")}
-                />
+                {draftAssistant.status === "streaming" ? (
+                  <TypingIndicator />
+                ) : (
+                  <MarkdownText text={draftAssistant.text || "(empty response)"} />
+                )}
               </div>
               {draftAssistant.status === "failed" && (
-                <button
-                  type="button"
-                  onClick={retryFailedDraft}
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => retryFailedDraft()}
                   disabled={isSending}
-                  className="mt-2 inline-flex items-center gap-1.5 text-xs text-destructive hover:underline disabled:opacity-50"
+                  className="mt-2"
                 >
                   <AlertCircle className="h-3.5 w-3.5" />
-                  Stream failed
+                  Stream failed — Retry
                   <RotateCcw className="h-3.5 w-3.5" />
-                  Retry
-                </button>
+                </Button>
               )}
             </div>
           </div>
@@ -310,25 +326,30 @@ export function ChatPanel() {
         void sendMessage();
       }} className="p-4 border-t border-border bg-card">
         <div className="flex gap-2">
-          <input
-            type="text"
+          <Input
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                e.preventDefault();
+                void sendMessage();
+              }
+            }}
             placeholder="Type a message..."
             disabled={isSending}
-            className="flex-1 px-3 py-2 text-sm rounded-lg border border-input bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+            className="flex-1"
           />
-          <button
+          <Button
             type="submit"
             disabled={!inputValue.trim() || isSending}
-            className="px-3 py-2 rounded-lg bg-primary text-primary-foreground hover:opacity-90 transition-opacity disabled:opacity-40 flex items-center gap-1.5"
+            size="icon"
           >
             {isSending ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
               <SendHorizontal className="h-4 w-4" />
             )}
-          </button>
+          </Button>
         </div>
       </form>
     </div>

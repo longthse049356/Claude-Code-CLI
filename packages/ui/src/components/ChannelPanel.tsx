@@ -3,6 +3,8 @@ import { Hash, Plus, Loader2 } from "lucide-react";
 import { useChannels, useCreateChannel } from "../hooks/useChannels";
 import { useAppStore } from "../stores/useAppStore";
 import { cn } from "../lib/utils";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 export function ChannelPanel() {
   const { data: channels = [], isLoading } = useChannels();
@@ -28,24 +30,23 @@ export function ChannelPanel() {
           Channels
         </h2>
         <form onSubmit={handleCreateChannel} className="flex gap-1.5">
-          <input
-            type="text"
+          <Input
             value={newChannelName}
             onChange={(e) => setNewChannelName(e.target.value)}
             placeholder="New channel..."
-            className="flex-1 px-2.5 py-1.5 text-sm rounded-md border border-input bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            className="flex-1"
           />
-          <button
+          <Button
             type="submit"
+            size="icon"
             disabled={createChannel.isPending || !newChannelName.trim()}
-            className="p-1.5 rounded-md bg-primary text-primary-foreground hover:opacity-90 transition-opacity disabled:opacity-40"
           >
             {createChannel.isPending ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
               <Plus className="h-4 w-4" />
             )}
-          </button>
+          </Button>
         </form>
       </div>
 
@@ -58,14 +59,14 @@ export function ChannelPanel() {
         {channels.map((channel) => {
           const isActive = selectedChannelId === channel.id;
           return (
-            <button
+            <Button
               key={channel.id}
-              onClick={() => setSelectedChannel(channel.id)}
+              variant="ghost"
               className={cn(
-                "w-full flex items-center gap-2 px-4 py-2 text-sm transition-colors border-l-2",
+                "w-full justify-start gap-2 text-left border-l-2",
                 isActive
                   ? "border-l-[hsl(var(--sidebar-active-foreground))] font-medium"
-                  : "border-l-transparent hover:bg-accent"
+                  : "border-l-transparent"
               )}
               style={
                 isActive
@@ -75,10 +76,11 @@ export function ChannelPanel() {
                     }
                   : { color: "hsl(var(--sidebar-foreground))" }
               }
+              onClick={() => setSelectedChannel(channel.id)}
             >
               <Hash className="h-4 w-4 flex-shrink-0 opacity-60" />
               <span className="truncate">{channel.name}</span>
-            </button>
+            </Button>
           );
         })}
         {channels.length === 0 && !isLoading && (

@@ -92,3 +92,13 @@ Mỗi spec file phải có đủ các sections:
 - Clawd analysis notes in `docs/clawd-notes/`
 - Spec files: `docs/superpowers/specs/milestones/M0X-xxx.spec.md` (1 per milestone, viết trước khi code)
 - Design files: `docs/superpowers/specs/milestones/M0X-xxx.md` (high-level overview, đã viết sẵn)
+
+## CSS Lessons (Hard-Won)
+
+- **Luôn wrap CSS color variables trong `hsl()`:**
+  `--background: hsl(270 60% 98%)` ✅
+  `--background: 270 60% 98%` ❌ (invalid, silently falls back to transparent)
+  Tailwind's `@apply bg-X` generates `background-color: hsl(var(--X))` — bare HSL numbers fail silently.
+
+- **Dark mode: apply class trên `<html>` ngay khi store khởi tạo:**
+  Module-level `applyTheme(initial)` đảm bảo CSS classes tồn tại trước React render lần đầu.

@@ -2,6 +2,10 @@ import { useState } from "react";
 import { Bot, Cpu, Loader2, Plus, Trash2 } from "lucide-react";
 import { useAgents, useAddAgent, useRemoveAgent } from "../hooks/useAgents";
 import { useAppStore } from "../stores/useAppStore";
+import { cn } from "../lib/utils";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card } from "@/components/ui/card";
 
 function formatModelName(model: string): string {
   // "claude-sonnet-4-20250514" -> "sonnet-4"
@@ -16,7 +20,11 @@ function formatModelName(model: string): string {
   return model;
 }
 
-export function AgentPanel() {
+interface AgentPanelProps {
+  runningAgentIds?: string[];
+}
+
+export function AgentPanel({ runningAgentIds = [] }: AgentPanelProps) {
   const { selectedChannelId } = useAppStore();
   const { data: agents = [], isLoading } = useAgents(selectedChannelId);
   const addAgent = useAddAgent();
@@ -53,24 +61,23 @@ export function AgentPanel() {
           Agents
         </h3>
         <form onSubmit={handleAddAgent} className="flex gap-1.5">
-          <input
-            type="text"
+          <Input
             value={newAgentName}
             onChange={(e) => setNewAgentName(e.target.value)}
             placeholder="Agent name..."
-            className="flex-1 px-2.5 py-1.5 text-sm rounded-md border border-input bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            className="flex-1"
           />
-          <button
+          <Button
             type="submit"
+            size="icon"
             disabled={addAgent.isPending || !newAgentName.trim()}
-            className="p-1.5 rounded-md bg-primary text-primary-foreground hover:opacity-90 transition-opacity disabled:opacity-40"
           >
             {addAgent.isPending ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
               <Plus className="h-4 w-4" />
             )}
-          </button>
+          </Button>
         </form>
       </div>
 
@@ -82,21 +89,20 @@ export function AgentPanel() {
         )}
         {agents.map((agent) => {
           return (
-            <div
-              key={agent.id}
-              className="rounded-lg border border-border bg-card p-3"
-            >
+            <Card key={agent.id} className="p-3">
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-2">
                   <Bot className="h-4 w-4 text-muted-foreground" />
                   <span className="text-sm font-medium">{agent.name}</span>
                 </div>
-                <button
+                <Button
+                  variant="ghost"
+                  size="icon"
                   onClick={() => handleRemoveAgent(agent.id)}
-                  className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                  className="text-muted-foreground hover:text-destructive"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
-                </button>
+                </Button>
               </div>
               <div className="mt-2 flex items-center gap-3 text-xs text-muted-foreground">
                 {agent.model && (
@@ -106,11 +112,14 @@ export function AgentPanel() {
                   </span>
                 )}
                 <span className="flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                  Idle
+                  <span className={cn(
+                    "w-1.5 h-1.5 rounded-full transition-colors",
+                    runningAgentIds.includes(agent.id) ? "bg-yellow-500 animate-pulse" : "bg-emerald-500"
+                  )} />
+                  {runningAgentIds.includes(agent.id) ? "Thinking" : "Idle"}
                 </span>
               </div>
-            </div>
+            </Card>
           );
         })}
         {agents.length === 0 && !isLoading && (
