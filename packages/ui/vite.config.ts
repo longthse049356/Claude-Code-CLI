@@ -13,10 +13,6 @@ export default defineConfig({
   server: {
     proxy: {
       '/channels': 'http://localhost:3456',
-      '/ws': {
-        target: 'ws://localhost:3456',
-        ws: true,
-      },
     },
   },
 })

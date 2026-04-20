@@ -2,8 +2,6 @@ import { useState } from "react";
 import { Bot, Cpu, Loader2, Plus, Trash2 } from "lucide-react";
 import { useAgents, useAddAgent, useRemoveAgent } from "../hooks/useAgents";
 import { useAppStore } from "../stores/useAppStore";
-import { useWsStore } from "../stores/useWsStore";
-import { cn } from "../lib/utils";
 
 function formatModelName(model: string): string {
   // "claude-sonnet-4-20250514" -> "sonnet-4"
@@ -23,7 +21,6 @@ export function AgentPanel() {
   const { data: agents = [], isLoading } = useAgents(selectedChannelId);
   const addAgent = useAddAgent();
   const removeAgent = useRemoveAgent();
-  const typingAgents = useWsStore((state) => state.typingAgents);
   const [newAgentName, setNewAgentName] = useState("");
 
   const handleAddAgent = (e: React.FormEvent) => {
@@ -38,11 +35,6 @@ export function AgentPanel() {
     if (selectedChannelId) {
       removeAgent.mutate({ channelId: selectedChannelId, agentId });
     }
-  };
-
-  const isAgentThinking = (agentName: string): boolean => {
-    if (!selectedChannelId) return false;
-    return typingAgents.has(`${selectedChannelId}:${agentName}`);
   };
 
   if (!selectedChannelId) {
@@ -89,7 +81,6 @@ export function AgentPanel() {
           </div>
         )}
         {agents.map((agent) => {
-          const thinking = isAgentThinking(agent.name);
           return (
             <div
               key={agent.id}
@@ -115,13 +106,8 @@ export function AgentPanel() {
                   </span>
                 )}
                 <span className="flex items-center gap-1">
-                  <span
-                    className={cn(
-                      "w-1.5 h-1.5 rounded-full",
-                      thinking ? "bg-amber-400 animate-pulse" : "bg-emerald-500"
-                    )}
-                  />
-                  {thinking ? "Thinking" : "Idle"}
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                  Idle
                 </span>
               </div>
             </div>

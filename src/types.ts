@@ -90,12 +90,6 @@ export interface CreateAgentBody {
   system_prompt?: string;
 }
 
-// --- WebSocket Broadcast ---
-
-export type WsBroadcast =
-  | { type: "new_message"; data: DbMessage }
-  | { type: "typing"; data: { agent_name: string; channel_id: string } };
-
 // --- API Error Response ---
 
 export interface ApiError {

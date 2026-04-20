@@ -31,6 +31,7 @@ test("createMessage and getMessagesByChannel round-trip", () => {
     channel_id: "ch-1",
     text: "Hello",
     role: "user",
+    agent_name: "",
     created_at: 2000,
   });
   const msgs = getMessagesByChannel("ch-1");
@@ -40,6 +41,7 @@ test("createMessage and getMessagesByChannel round-trip", () => {
     channel_id: "ch-1",
     text: "Hello",
     role: "user",
+    agent_name: "",
     created_at: 2000,
   });
 });
@@ -52,8 +54,8 @@ test("getMessagesByChannel returns empty array when channel has no messages", ()
 test("getMessagesByChannel orders messages by created_at ASC", () => {
   createChannel("ch-1", "general", 1000);
   // Insert newer message first
-  createMessage({ id: "msg-2", channel_id: "ch-1", text: "Second", role: "user", created_at: 3000 });
-  createMessage({ id: "msg-1", channel_id: "ch-1", text: "First",  role: "user", created_at: 2000 });
+  createMessage({ id: "msg-2", channel_id: "ch-1", text: "Second", role: "user", agent_name: "", created_at: 3000 });
+  createMessage({ id: "msg-1", channel_id: "ch-1", text: "First",  role: "user", agent_name: "", created_at: 2000 });
   const msgs = getMessagesByChannel("ch-1");
   expect(msgs[0].id).toBe("msg-1");
   expect(msgs[1].id).toBe("msg-2");
@@ -130,9 +132,9 @@ test("getAgentByChannelAndName returns null when not found", () => {
 
 test("getMessagesAfter returns only messages after cursor", () => {
   createChannel("ch-1", "general", 1000);
-  createMessage({ id: "m-1", channel_id: "ch-1", text: "A", role: "user", created_at: 1000 });
-  createMessage({ id: "m-2", channel_id: "ch-1", text: "B", role: "user", created_at: 2000 });
-  createMessage({ id: "m-3", channel_id: "ch-1", text: "C", role: "user", created_at: 3000 });
+  createMessage({ id: "m-1", channel_id: "ch-1", text: "A", role: "user", agent_name: "", created_at: 1000 });
+  createMessage({ id: "m-2", channel_id: "ch-1", text: "B", role: "user", agent_name: "", created_at: 2000 });
+  createMessage({ id: "m-3", channel_id: "ch-1", text: "C", role: "user", agent_name: "", created_at: 3000 });
   const result = getMessagesAfter("ch-1", 1500);
   expect(result).toHaveLength(2);
   expect(result[0].id).toBe("m-2");

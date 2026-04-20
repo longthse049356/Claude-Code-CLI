@@ -4,7 +4,6 @@ import {
   getMessagesAfter,
   updateAgentCursor,
 } from "../server/database.ts";
-import { broadcast } from "../server/websocket.ts";
 import { sendMessage } from "../providers/anthropic.ts";
 import { buildSystemPrompt } from "./system-prompt.ts";
 import { log } from "../server/logger.ts";
@@ -75,13 +74,10 @@ export class WorkerLoop {
         } else {
           log(`[WORKER] ${this.agent.name} — ${userMessages.length} new user message(s), processing`);
 
-          // 4. Broadcast typing indicator
-          broadcast({ type: "typing", data: { agent_name: this.agent.name, channel_id: this.agent.channel_id } });
-
-          // 5. Load full conversation history for context
+          // 4. Load full conversation history for context
           const history = getMessagesByChannel(this.agent.channel_id);
 
-          // 6. Map DbMessage[] → Message[] for the LLM
+          // 5. Map DbMessage[] → Message[] for the LLM
           const messages: Message[] = history.map((m): Message => {
             if (m.role === "user") {
               return { role: "user", content: m.text };
@@ -89,11 +85,11 @@ export class WorkerLoop {
             return { role: "assistant", content: [{ type: "text", text: m.text }] };
           });
 
-          // 7. Call LLM
+          // 6. Call LLM
           const systemPrompt = buildSystemPrompt(this.agent.name, this.agent.system_prompt);
           const result = await sendMessage(messages, { model: this.agent.model, systemPrompt });
 
-          // 8. Extract text from response
+          // 7. Extract text from response
           const replyText = result.content
             .filter((b) => b.type === "text")
             .map((b) => (b as { type: "text"; text: string }).text)
@@ -102,7 +98,7 @@ export class WorkerLoop {
           if (!replyText.trim()) {
             log(`[WORKER] ${this.agent.name} — LLM returned empty text, skipping reply`);
           } else {
-            // 9. Save reply to DB and broadcast
+            // 8. Save reply to DB
             const reply = {
               id: crypto.randomUUID(),
               channel_id: this.agent.channel_id,
@@ -112,7 +108,6 @@ export class WorkerLoop {
               created_at: Date.now(),
             };
             createMessage(reply);
-            broadcast({ type: "new_message", data: reply });
             log(`[WORKER] ${this.agent.name} — replied: "${replyText.slice(0, 60)}..."`);
           }
         }

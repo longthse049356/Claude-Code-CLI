@@ -1,4 +1,13 @@
-import type { Agent, ApiError, Channel, CreateAgentBody, CreateChannelBody, CreateMessageBody, DbMessage } from "../types.ts";
+import type {
+  Agent,
+  ApiError,
+  Channel,
+  CreateAgentBody,
+  CreateChannelBody,
+  CreateMessageBody,
+  DbMessage,
+  Message,
+} from "../types.ts";
 import {
   createAgent,
   createChannel,
@@ -11,10 +20,14 @@ import {
   getChannel,
   getMessagesByChannel,
 } from "./database.ts";
-import { broadcast } from "./websocket.ts";
 import { startAgent, stopAgent } from "../agent/worker-manager.ts";
-import { DEFAULT_MODEL } from "../providers/anthropic.ts";
+import { buildSystemPrompt } from "../agent/system-prompt.ts";
+import {
+  DEFAULT_MODEL,
+  streamAssistantText as streamAssistantTextFromProvider,
+} from "../providers/anthropic.ts";
 import { log } from "./logger.ts";
+import { handleStreamMessage } from "./stream-message.ts";
 
 function json(data: unknown, status = 200): Response {
   log(`[ROUTER] → response ${status}: ${JSON.stringify(data)}`);
@@ -103,6 +116,56 @@ export async function handleRequest(req: Request): Promise<Response> {
     return json({ agents });
   }
 
+  // POST /channels/:id/messages/stream — send and stream assistant response over SSE
+  if (
+    req.method === "POST" &&
+    parts.length === 4 &&
+    parts[0] === "channels" &&
+    parts[2] === "messages" &&
+    parts[3] === "stream"
+  ) {
+    const channelId = parts[1];
+    log(`[ROUTER] matched: POST /channels/:id/messages/stream — channelId="${channelId}"`);
+
+    const channel = getChannel(channelId);
+    if (!channel) {
+      log(`[ROUTER] channel "${channelId}" NOT FOUND`);
+      return json({ error: "channel not found" } satisfies ApiError, 404);
+    }
+
+    const agents = getAgentsByChannel(channelId);
+    if (agents.length === 0) {
+      log(`[ROUTER] no agents in channel "${channelId}"`);
+      return json({ error: "no agents in channel" } satisfies ApiError, 409);
+    }
+
+    const agent = agents[0];
+
+    return handleStreamMessage(req, channelId, {
+      agentName: agent.name,
+      streamAssistantText: async ({ onToken, signal }) => {
+        const history = getMessagesByChannel(channelId);
+        const historyForProvider: Message[] = history.map((message): Message => {
+          if (message.role === "user") {
+            return { role: "user", content: message.text };
+          }
+
+          return {
+            role: "assistant",
+            content: [{ type: "text", text: message.text }],
+          };
+        });
+
+        return streamAssistantTextFromProvider(historyForProvider, {
+          model: agent.model,
+          systemPrompt: buildSystemPrompt(agent.name, agent.system_prompt),
+          signal,
+          onToken,
+        });
+      },
+    });
+  }
+
   // POST /channels/:id/messages — send a message to a channel
   if (
     req.method === "POST" &&
@@ -143,9 +206,6 @@ export async function handleRequest(req: Request): Promise<Response> {
     };
 
     createMessage(msg);
-    log(`[ROUTER] broadcasting to WS clients...`);
-    broadcast({ type: "new_message", data: msg });
-
     return json(msg, 201);
   }
 

@@ -9,6 +9,50 @@ const client = new Anthropic({
   ...(process.env.ANTHROPIC_BASE_URL ? { baseURL: process.env.ANTHROPIC_BASE_URL } : {}),
 });
 
+export async function streamAssistantText(
+  messages: Message[],
+  options: {
+    model?: string;
+    maxTokens?: number;
+    systemPrompt?: string;
+    signal?: AbortSignal;
+    onToken: (text: string) => void;
+  }
+): Promise<string> {
+  const model = options.model ?? DEFAULT_MODEL;
+  const maxTokens = options.maxTokens ?? 4096;
+
+  const apiMessages = messages.map((msg) => {
+    if (msg.role === "user") {
+      return { role: "user" as const, content: msg.content };
+    }
+    return {
+      role: "assistant" as const,
+      content: msg.content
+        .filter((block) => block.type === "text")
+        .map((block) => ({ type: "text" as const, text: block.text })),
+    };
+  });
+
+  const stream = client.messages.stream(
+    {
+      model,
+      max_tokens: maxTokens,
+      system: options.systemPrompt ?? "",
+      messages: apiMessages,
+    },
+    options.signal ? { signal: options.signal } : undefined
+  );
+
+  let fullText = "";
+  stream.on("text", (token) => {
+    fullText += token;
+    options.onToken(token);
+  });
+
+  await stream.finalMessage();
+  return fullText;
+}
 export async function sendMessage(
   messages: Message[],
   options?: {
@@ -51,7 +95,6 @@ export async function sendMessage(
       max_tokens: maxTokens,
       system: systemPrompt,
       messages: apiMessages,
-      // Only include tools field when tools are actually defined
       ...(tools.length > 0 ? { tools: tools as Anthropic.Tool[] } : {}),
     },
     signal ? { signal } : undefined

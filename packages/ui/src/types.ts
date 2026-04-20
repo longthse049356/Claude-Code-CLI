@@ -23,7 +23,3 @@ export interface DbMessage {
   agent_name: string;
   created_at: number;
 }
-
-export type WsBroadcast =
-  | { type: "new_message"; data: DbMessage }
-  | { type: "typing"; data: { agent_name: string; channel_id: string } };
