@@ -8,6 +8,7 @@ resumeAll(); // Restart any agents persisted in DB from previous runs
 
 Bun.serve({
   port: 3456,
+  idleTimeout: 0,
   fetch(req) {
     const pathname = new URL(req.url).pathname;
 

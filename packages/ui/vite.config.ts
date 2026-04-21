@@ -12,7 +12,18 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      '/channels': 'http://localhost:3456',
+      '/channels': {
+        target: 'http://localhost:3456',
+        changeOrigin: true,
+        // Disable buffering so SSE events stream through immediately
+        configure: (proxy) => {
+          proxy.on('proxyRes', (proxyRes) => {
+            if (proxyRes.headers['content-type']?.includes('text/event-stream')) {
+              proxyRes.headers['x-accel-buffering'] = 'no';
+            }
+          });
+        },
+      },
     },
   },
 })

@@ -7,4 +7,5 @@ dist/
 *.db-wal
 .worktrees/
 .superpowers/
-.vscode/
+.vscode/__pycache__
+.claude/skills/ui-ux-pro-max/scripts/__pycache__/

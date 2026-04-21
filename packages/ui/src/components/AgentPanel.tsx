@@ -39,9 +39,9 @@ export function AgentPanel({ runningAgentIds = [] }: AgentPanelProps) {
     }
   };
 
-  const handleRemoveAgent = (agentId: string) => {
+  const handleRemoveAgent = (agentName: string) => {
     if (selectedChannelId) {
-      removeAgent.mutate({ channelId: selectedChannelId, agentId });
+      removeAgent.mutate({ channelId: selectedChannelId, agentName });
     }
   };
 
@@ -98,7 +98,7 @@ export function AgentPanel({ runningAgentIds = [] }: AgentPanelProps) {
                 <Button
                   variant="ghost"
                   size="icon"
-                  onClick={() => handleRemoveAgent(agent.id)}
+                  onClick={() => handleRemoveAgent(agent.name)}
                   className="text-muted-foreground hover:text-destructive"
                 >
                   <Trash2 className="h-3.5 w-3.5" />

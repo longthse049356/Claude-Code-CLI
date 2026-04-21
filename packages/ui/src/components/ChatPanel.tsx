@@ -21,11 +21,17 @@ function formatTime(timestamp: number): string {
   }).format(new Date(timestamp));
 }
 
+type ProgressStatus =
+  | { type: "thinking" }
+  | { type: "tool_call"; toolName: string; iteration: number }
+  | { type: "tool_done"; toolName: string };
+
 type DraftAssistantState = {
   channelId: string;
   text: string;
   status: "streaming" | "failed";
   userText: string;
+  progress: ProgressStatus | null;
 };
 
 function MarkdownText({ text }: { text: string }) {
@@ -99,13 +105,27 @@ export function ChatPanel() {
         return;
       }
 
+      if (event === "progress") {
+        let payload: ProgressStatus;
+        try {
+          payload = JSON.parse(data) as ProgressStatus;
+        } catch {
+          return;
+        }
+        setDraftAssistant((prev) => {
+          if (!prev || prev.channelId !== channelId) return prev;
+          return { ...prev, progress: payload };
+        });
+        return;
+      }
+
       if (event === "done") {
         doneReceived = true;
         setConnectionStatus("connected");
+        // Refetch from DB — gets both the user message and assistant reply in correct order
+        await queryClient.refetchQueries({ queryKey: ["messages", channelId], type: "active" });
         setDraftAssistant(null);
         setOptimisticUserMessage(null);
-        await queryClient.invalidateQueries({ queryKey: ["messages", channelId] });
-        await queryClient.refetchQueries({ queryKey: ["messages", channelId], type: "active" });
         return;
       }
 
@@ -123,18 +143,21 @@ export function ChatPanel() {
     });
 
     if (!doneReceived) {
-      await queryClient.invalidateQueries({ queryKey: ["messages", channelId] });
+      // Connection dropped before done — refetch to restore both messages
       await queryClient.refetchQueries({ queryKey: ["messages", channelId], type: "active" });
+      const cached = queryClient.getQueryData<import("../types").DbMessage[]>(["messages", channelId]);
+      const workerReplied = cached?.some((m) => m.role === "assistant" && m.created_at > (optimisticUserMessage?.created_at ?? 0));
+      if (workerReplied) {
+        setDraftAssistant(null);
+      }
       setOptimisticUserMessage(null);
     }
 
     if (!doneReceived && !errorReceived) {
       setDraftAssistant((prev) => {
         if (!prev || prev.channelId !== channelId) return prev;
-        return {
-          ...prev,
-          status: "failed",
-        };
+        // Only show failed if draft is still active (not cleared by workerReplied check above)
+        return { ...prev, status: "failed" };
       });
     }
   };
@@ -159,6 +182,7 @@ export function ChatPanel() {
       text: "",
       status: "streaming",
       userText: trimmed,
+      progress: null,
     });
 
     try {
@@ -296,7 +320,7 @@ export function ChatPanel() {
                 }}
               >
                 {draftAssistant.status === "streaming" ? (
-                  <TypingIndicator />
+                  <TypingIndicator progress={draftAssistant.progress} />
                 ) : (
                   <MarkdownText text={draftAssistant.text || "(empty response)"} />
                 )}

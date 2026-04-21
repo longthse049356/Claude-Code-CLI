@@ -51,7 +51,31 @@ Rebuilding the [Clawd](https://github.com/Tuanm/clawd) AI agent platform from sc
 
 Read-only operations (git status, diff, log, add) không cần hỏi.
 
+## Coding Behavior — Cách Claude phải behave trong lúc code
 
+> Nguồn gốc: Rút ra từ Karpathy Guidelines (behavioral rules giảm lỗi phổ biến của LLM khi code).
+> Rules ở trên kiểm soát **khi nào** được code. Section này kiểm soát **cách** code.
+
+### Think Before Coding
+- Nếu có nhiều cách hiểu → nêu ra tất cả, KHÔNG tự chọn im lặng
+- Nếu có approach đơn giản hơn → nói ra, push back khi cần
+- Nếu unclear → DỪNG LẠI, nêu rõ chỗ confusing, hỏi trước khi làm
+- State assumptions explicitly — đừng giấu uncertainty
+
+### Simplicity First
+- KHÔNG thêm feature/abstraction/config ngoài spec
+- KHÔNG handle error cho scenarios không thể xảy ra
+- Single-use code → KHÔNG tạo abstraction
+- 200 dòng mà có thể viết 50 → viết lại
+- Tự hỏi: "Senior engineer có bảo overcomplicated không?" → nếu có, simplify
+
+### Surgical Changes
+- KHÔNG "improve" code lân cận, comments, formatting ngoài phạm vi task
+- KHÔNG refactor thứ không hỏng
+- Match existing code style, dù mình muốn viết khác
+- Dead code không liên quan → mention cho user, KHÔNG tự xóa
+- Chỉ xóa imports/vars/functions mà CHÍNH MÌNH tạo ra rồi không dùng
+- Mọi dòng thay đổi phải trace trực tiếp về yêu cầu của user
 
 **Bắt buộc theo thứ tự này cho mỗi milestone:**
 
@@ -102,3 +126,5 @@ Mỗi spec file phải có đủ các sections:
 
 - **Dark mode: apply class trên `<html>` ngay khi store khởi tạo:**
   Module-level `applyTheme(initial)` đảm bảo CSS classes tồn tại trước React render lần đầu.
+
+## ⚠️ PRIORITY: Code cho cẩn thận đấy tao sẽ dùng Codex để review

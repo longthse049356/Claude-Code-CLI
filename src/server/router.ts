@@ -6,28 +6,25 @@ import type {
   CreateChannelBody,
   CreateMessageBody,
   DbMessage,
-  Message,
 } from "../types.ts";
 import {
   createAgent,
   createChannel,
   createMessage,
   deleteAgent,
+  deleteChannel,
   getAgent,
   getAgentByChannelAndName,
   getAgentsByChannel,
   getAllChannels,
   getChannel,
   getMessagesByChannel,
+  getMessagesAfter,
 } from "./database.ts";
 import { startAgent, stopAgent } from "../agent/worker-manager.ts";
-import { buildSystemPrompt } from "../agent/system-prompt.ts";
-import {
-  DEFAULT_MODEL,
-  streamAssistantText as streamAssistantTextFromProvider,
-} from "../providers/anthropic.ts";
+import { DEFAULT_MODEL } from "../providers/anthropic.ts";
+import { getProgress } from "../agent/progress.ts";
 import { log } from "./logger.ts";
-import { handleStreamMessage } from "./stream-message.ts";
 
 function json(data: unknown, status = 200): Response {
   log(`[ROUTER] → response ${status}: ${JSON.stringify(data)}`);
@@ -116,7 +113,7 @@ export async function handleRequest(req: Request): Promise<Response> {
     return json({ agents });
   }
 
-  // POST /channels/:id/messages/stream — send and stream assistant response over SSE
+  // POST /channels/:id/messages/stream — save user message, wait for worker loop reply via SSE
   if (
     req.method === "POST" &&
     parts.length === 4 &&
@@ -139,31 +136,77 @@ export async function handleRequest(req: Request): Promise<Response> {
       return json({ error: "no agents in channel" } satisfies ApiError, 409);
     }
 
-    const agent = agents[0];
+    let body: CreateMessageBody;
+    try {
+      body = (await req.json()) as CreateMessageBody;
+    } catch {
+      return json({ error: "invalid JSON" } satisfies ApiError, 400);
+    }
 
-    return handleStreamMessage(req, channelId, {
-      agentName: agent.name,
-      streamAssistantText: async ({ onToken, signal }) => {
-        const history = getMessagesByChannel(channelId);
-        const historyForProvider: Message[] = history.map((message): Message => {
-          if (message.role === "user") {
-            return { role: "user", content: message.text };
+    const text = body.text?.trim();
+    if (!text) return json({ error: "text is required" } satisfies ApiError, 400);
+
+    const userMessage: DbMessage = {
+      id: crypto.randomUUID(),
+      channel_id: channelId,
+      text,
+      role: "user",
+      agent_name: "",
+      created_at: Date.now(),
+    };
+    createMessage(userMessage);
+    log(`[ROUTER] saved user message, waiting for worker loop reply`);
+
+    // Poll DB for the worker loop's assistant reply (up to 120s)
+    const POLL_INTERVAL_MS = 500;
+    const KEEPALIVE_INTERVAL_MS = 10_000;
+    const TIMEOUT_MS = 120_000;
+    const cursor = userMessage.created_at;
+    const { sseEvent, sseHeaders } = await import("./sse.ts");
+    const encoder = new TextEncoder();
+    const keepaliveComment = encoder.encode(": keepalive\n\n");
+
+    const stream = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        const deadline = Date.now() + TIMEOUT_MS;
+        let lastKeepalive = Date.now();
+        let lastProgressJson = "";
+
+        while (Date.now() < deadline) {
+          if (req.signal.aborted) break;
+
+          // Emit progress events when worker status changes
+          const progress = getProgress(channelId);
+          const progressJson = JSON.stringify(progress);
+          if (progress && progressJson !== lastProgressJson) {
+            controller.enqueue(encoder.encode(sseEvent("progress", progress)));
+            lastProgressJson = progressJson;
           }
 
-          return {
-            role: "assistant",
-            content: [{ type: "text", text: message.text }],
-          };
-        });
+          const newMessages = getMessagesAfter(channelId, cursor);
+          const reply = newMessages.find((m) => m.role === "assistant");
 
-        return streamAssistantTextFromProvider(historyForProvider, {
-          model: agent.model,
-          systemPrompt: buildSystemPrompt(agent.name, agent.system_prompt),
-          signal,
-          onToken,
-        });
+          if (reply) {
+            controller.enqueue(encoder.encode(sseEvent("done", { message: reply })));
+            controller.close();
+            return;
+          }
+
+          if (Date.now() - lastKeepalive >= KEEPALIVE_INTERVAL_MS) {
+            controller.enqueue(keepaliveComment);
+            lastKeepalive = Date.now();
+          }
+
+          await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+        }
+
+        // Timed out — tell client so it can show error state
+        controller.enqueue(encoder.encode(sseEvent("error", { error: "agent did not reply in time" })));
+        controller.close();
       },
     });
+
+    return new Response(stream, { status: 200, headers: sseHeaders });
   }
 
   // POST /channels/:id/messages — send a message to a channel
@@ -290,6 +333,33 @@ export async function handleRequest(req: Request): Promise<Response> {
     log(`[ROUTER] agent "${agentName}" stopped and deleted`);
 
     return json({ message: "agent stopped" }, 200);
+  }
+
+  // DELETE /channels/:id — delete a channel and all its agents + messages
+  if (
+    req.method === "DELETE" &&
+    parts.length === 2 &&
+    parts[0] === "channels"
+  ) {
+    const channelId = parts[1];
+    log(`[ROUTER] matched: DELETE /channels/:id — channelId="${channelId}"`);
+
+    const channel = getChannel(channelId);
+    if (!channel) {
+      log(`[ROUTER] channel "${channelId}" NOT FOUND`);
+      return json({ error: "channel not found" } satisfies ApiError, 404);
+    }
+
+    // Stop all running agents in this channel before deleting
+    const agents = getAgentsByChannel(channelId);
+    for (const agent of agents) {
+      stopAgent(agent.id);
+    }
+
+    deleteChannel(channelId);
+    log(`[ROUTER] channel "${channelId}" deleted with ${agents.length} agent(s)`);
+
+    return json({ message: "channel deleted" }, 200);
   }
 
   // Serve static files from packages/ui/dist/

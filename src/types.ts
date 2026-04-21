@@ -26,7 +26,12 @@ export interface AssistantMessage {
   content: ContentBlock[];
 }
 
-export type Message = UserMessage | AssistantMessage;
+export interface ToolResultMessage {
+  role: "user";
+  content: ToolResultBlock[];
+}
+
+export type Message = UserMessage | AssistantMessage | ToolResultMessage;
 
 export interface StreamResult {
   content: ContentBlock[];
@@ -45,6 +50,20 @@ export interface ToolDefinition {
     properties: Record<string, unknown>;
     required?: string[];
   };
+}
+
+export interface ToolResultBlock {
+  type: "tool_result";
+  tool_use_id: string;
+  content: string;
+  is_error?: boolean;
+}
+
+export type ToolHandler = (input: Record<string, unknown>) => Promise<string>;
+
+export interface ToolEntry {
+  definition: ToolDefinition;
+  handler: ToolHandler;
 }
 
 // --- Database Models ---

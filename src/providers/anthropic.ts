@@ -1,6 +1,6 @@
 // src/providers/anthropic.ts
 import Anthropic from "@anthropic-ai/sdk";
-import type { Message, StreamResult, ToolDefinition } from "../types.ts";
+import type { Message, StreamResult, ToolDefinition, ToolResultBlock } from "../types.ts";
 
 export const DEFAULT_MODEL = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-20250514";
 
@@ -71,7 +71,18 @@ export async function sendMessage(
 
   const apiMessages = messages.map((msg) => {
     if (msg.role === "user") {
-      return { role: "user" as const, content: msg.content };
+      if (typeof msg.content === "string") {
+        return { role: "user" as const, content: msg.content };
+      }
+      return {
+        role: "user" as const,
+        content: (msg.content as ToolResultBlock[]).map((block) => ({
+          type: "tool_result" as const,
+          tool_use_id: block.tool_use_id,
+          content: block.content,
+          ...(block.is_error ? { is_error: true } : {}),
+        })),
+      };
     }
     return {
       role: "assistant" as const,
