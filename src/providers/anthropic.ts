@@ -61,6 +61,7 @@ export async function sendMessage(
     tools?: ToolDefinition[];
     systemPrompt?: string;
     signal?: AbortSignal;
+    onToken?: (delta: string) => void;
   }
 ): Promise<StreamResult> {
   const model = options?.model ?? DEFAULT_MODEL;
@@ -110,6 +111,12 @@ export async function sendMessage(
     },
     signal ? { signal } : undefined
   );
+
+  if (options?.onToken) {
+    stream.on("text", (delta) => {
+      options.onToken!(delta);
+    });
+  }
 
   const finalMessage = await stream.finalMessage();
 

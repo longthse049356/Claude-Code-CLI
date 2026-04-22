@@ -3,9 +3,9 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useQueryClient } from "@tanstack/react-query";
 import { AlertCircle, Bot, Loader2, MessageSquare, RotateCcw, SendHorizontal, User } from "lucide-react";
+import { fetchEventSource } from "@microsoft/fetch-event-source";
 import { useMessages } from "../hooks/useMessages";
 import { useAppStore } from "../stores/useAppStore";
-import { readSseStream } from "../lib/sse";
 import { cn } from "../lib/utils";
 import type { DbMessage } from "../types";
 import { Button } from "@/components/ui/button";
@@ -59,94 +59,101 @@ export function ChatPanel() {
 
   const streamMessage = async (channelId: string, userText: string) => {
     setConnectionStatus("connecting");
-    const res = await fetch(`/channels/${channelId}/messages/stream`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: userText }),
-    });
-
-    if (!res.ok) {
-      setConnectionStatus("error");
-      let message = `Failed to send message (${res.status})`;
-      try {
-        const payload = (await res.json()) as { error?: string };
-        if (payload.error) {
-          message = payload.error;
-        }
-      } catch {
-        // keep default
-      }
-      throw new Error(message);
-    }
-
-    if (!res.body) {
-      throw new Error("SSE stream not available");
-    }
 
     let doneReceived = false;
     let errorReceived = false;
+    let opened = false;
 
-    await readSseStream(res.body, async ({ event, data }) => {
-      if (event === "token") {
-        let payload: { text?: string };
-        try {
-          payload = JSON.parse(data) as { text?: string };
-        } catch {
-          return;
-        }
-        if (!payload.text) return;
-        setDraftAssistant((prev) => {
-          if (!prev || prev.channelId !== channelId) return prev;
-          return {
-            ...prev,
-            text: prev.text + payload.text,
-          };
-        });
-        return;
-      }
+    try {
+      await fetchEventSource(`/channels/${channelId}/messages/stream`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: userText }),
+        openWhenHidden: true,
+        async onopen(res) {
+          if (!res.ok) {
+            let message = `Failed to send message (${res.status})`;
+            try {
+              const payload = (await res.json()) as { error?: string };
+              if (payload.error) message = payload.error;
+            } catch {
+              // keep default
+            }
+            throw new Error(message);
+          }
+          opened = true;
+        },
+        onmessage(ev) {
+          if (ev.event === "token") {
+            let payload: { text?: string };
+            try {
+              payload = JSON.parse(ev.data) as { text?: string };
+            } catch {
+              return;
+            }
+            if (!payload.text) return;
+            setDraftAssistant((prev) => {
+              if (!prev || prev.channelId !== channelId) return prev;
+              return { ...prev, text: prev.text + payload.text };
+            });
+            return;
+          }
 
-      if (event === "progress") {
-        let payload: ProgressStatus;
-        try {
-          payload = JSON.parse(data) as ProgressStatus;
-        } catch {
-          return;
-        }
-        setDraftAssistant((prev) => {
-          if (!prev || prev.channelId !== channelId) return prev;
-          return { ...prev, progress: payload };
-        });
-        return;
-      }
+          if (ev.event === "progress") {
+            let payload: ProgressStatus;
+            try {
+              payload = JSON.parse(ev.data) as ProgressStatus;
+            } catch {
+              return;
+            }
+            setDraftAssistant((prev) => {
+              if (!prev || prev.channelId !== channelId) return prev;
+              return { ...prev, progress: payload };
+            });
+            return;
+          }
 
-      if (event === "done") {
-        doneReceived = true;
-        setConnectionStatus("connected");
-        // Refetch from DB — gets both the user message and assistant reply in correct order
-        await queryClient.refetchQueries({ queryKey: ["messages", channelId], type: "active" });
-        setDraftAssistant(null);
-        setOptimisticUserMessage(null);
-        return;
-      }
+          if (ev.event === "done") {
+            doneReceived = true;
+            setConnectionStatus("connected");
+            void queryClient
+              .refetchQueries({ queryKey: ["messages", channelId], type: "active" })
+              .then(() => {
+                setDraftAssistant(null);
+                setOptimisticUserMessage(null);
+              });
+            throw new Error("__sse_done__");
+          }
 
-      if (event === "error") {
-        errorReceived = true;
-        setConnectionStatus("error");
-        setDraftAssistant((prev) => {
-          if (!prev || prev.channelId !== channelId) return prev;
-          return {
-            ...prev,
-            status: "failed",
-          };
-        });
+          if (ev.event === "error") {
+            errorReceived = true;
+            setConnectionStatus("error");
+            setDraftAssistant((prev) => {
+              if (!prev || prev.channelId !== channelId) return prev;
+              return { ...prev, status: "failed" };
+            });
+            throw new Error("__sse_error__");
+          }
+        },
+        onerror(err) {
+          // Re-throw to stop fetchEventSource from auto-retrying
+          throw err;
+        },
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "";
+      if (msg !== "__sse_done__" && msg !== "__sse_error__") {
+        if (!opened) throw err;
+        // Connection dropped mid-stream — fall through to recovery below
       }
-    });
+    }
 
     if (!doneReceived) {
-      // Connection dropped before done — refetch to restore both messages
       await queryClient.refetchQueries({ queryKey: ["messages", channelId], type: "active" });
       const cached = queryClient.getQueryData<import("../types").DbMessage[]>(["messages", channelId]);
-      const workerReplied = cached?.some((m) => m.role === "assistant" && m.created_at > (optimisticUserMessage?.created_at ?? 0));
+      const workerReplied = cached?.some(
+        (m) => m.role === "assistant" && m.created_at > (optimisticUserMessage?.created_at ?? 0),
+      );
       if (workerReplied) {
         setDraftAssistant(null);
       }
@@ -156,7 +163,6 @@ export function ChatPanel() {
     if (!doneReceived && !errorReceived) {
       setDraftAssistant((prev) => {
         if (!prev || prev.channelId !== channelId) return prev;
-        // Only show failed if draft is still active (not cleared by workerReplied check above)
         return { ...prev, status: "failed" };
       });
     }
@@ -319,10 +325,15 @@ export function ChatPanel() {
                   color: "hsl(var(--bubble-assistant-foreground))",
                 }}
               >
-                {draftAssistant.status === "streaming" ? (
+                {draftAssistant.status === "streaming" && !draftAssistant.text ? (
                   <TypingIndicator progress={draftAssistant.progress} />
                 ) : (
-                  <MarkdownText text={draftAssistant.text || "(empty response)"} />
+                  <>
+                    <MarkdownText text={draftAssistant.text || "(empty response)"} />
+                    {draftAssistant.status === "streaming" && (
+                      <span className="inline-block w-1.5 h-3 ml-0.5 align-middle bg-current animate-pulse" />
+                    )}
+                  </>
                 )}
               </div>
               {draftAssistant.status === "failed" && (

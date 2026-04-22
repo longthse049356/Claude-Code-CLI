@@ -8,7 +8,7 @@ import { sendMessage } from "../providers/anthropic.ts";
 import { buildSystemPrompt } from "./system-prompt.ts";
 import { log } from "../server/logger.ts";
 import { getToolSchemas, executeTool } from "../tools/registry.ts";
-import { setProgress, clearProgress } from "./progress.ts";
+import { setProgress, clearProgress, appendToken, clearTokens } from "./progress.ts";
 import type { Agent, Message, ToolResultBlock } from "../types.ts";
 
 /**
@@ -91,7 +91,13 @@ export class WorkerLoop {
           const tools = getToolSchemas();
           const systemPrompt = buildSystemPrompt(this.agent.name, this.agent.system_prompt);
           setProgress(this.agent.channel_id, { type: "thinking" });
-          let result = await sendMessage(messages, { model: this.agent.model, systemPrompt, tools });
+          clearTokens(this.agent.channel_id);
+          let result = await sendMessage(messages, {
+            model: this.agent.model,
+            systemPrompt,
+            tools,
+            onToken: (delta) => appendToken(this.agent.channel_id, delta),
+          });
 
           // 7. Tool execution loop
           const MAX_TOOL_ITERATIONS = 10;
@@ -121,7 +127,13 @@ export class WorkerLoop {
 
             messages.push({ role: "user", content: toolResults });
             setProgress(this.agent.channel_id, { type: "thinking" });
-            result = await sendMessage(messages, { model: this.agent.model, systemPrompt, tools });
+            clearTokens(this.agent.channel_id);
+            result = await sendMessage(messages, {
+              model: this.agent.model,
+              systemPrompt,
+              tools,
+              onToken: (delta) => appendToken(this.agent.channel_id, delta),
+            });
           }
 
           if (iterations >= MAX_TOOL_ITERATIONS) {
@@ -150,6 +162,7 @@ export class WorkerLoop {
             log(`[WORKER] ${this.agent.name} — replied: "${replyText.slice(0, 60)}..."`);
           }
           clearProgress(this.agent.channel_id);
+          clearTokens(this.agent.channel_id);
         }
       }
     } catch (err) {

@@ -23,7 +23,7 @@ import {
 } from "./database.ts";
 import { startAgent, stopAgent } from "../agent/worker-manager.ts";
 import { DEFAULT_MODEL } from "../providers/anthropic.ts";
-import { getProgress } from "../agent/progress.ts";
+import { getProgress, getTokens, getTokensSince } from "../agent/progress.ts";
 import { log } from "./logger.ts";
 
 function json(data: unknown, status = 200): Response {
@@ -171,6 +171,7 @@ export async function handleRequest(req: Request): Promise<Response> {
         const deadline = Date.now() + TIMEOUT_MS;
         let lastKeepalive = Date.now();
         let lastProgressJson = "";
+        let lastTokenOffset = 0;
 
         while (Date.now() < deadline) {
           if (req.signal.aborted) break;
@@ -181,6 +182,13 @@ export async function handleRequest(req: Request): Promise<Response> {
           if (progress && progressJson !== lastProgressJson) {
             controller.enqueue(encoder.encode(sseEvent("progress", progress)));
             lastProgressJson = progressJson;
+          }
+
+          // Emit token delta if new text streamed in
+          const tokenDelta = getTokensSince(channelId, lastTokenOffset);
+          if (tokenDelta) {
+            controller.enqueue(encoder.encode(sseEvent("token", { text: tokenDelta })));
+            lastTokenOffset = getTokens(channelId).length;
           }
 
           const newMessages = getMessagesAfter(channelId, cursor);

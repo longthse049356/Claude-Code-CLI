@@ -19,3 +19,35 @@ export function getProgress(channelId: string): ProgressStatus | null {
 export function clearProgress(channelId: string): void {
   store.delete(channelId);
 }
+
+// --- Token streaming store ---
+// Accumulated assistant text streaming per channel.
+// Worker appends deltas; SSE endpoint polls via getTokensSince.
+
+const tokenStore = new Map<string, string>();
+
+export function appendToken(channelId: string, delta: string): void {
+  const current = tokenStore.get(channelId) ?? "";
+  tokenStore.set(channelId, current + delta);
+}
+
+export function getTokens(channelId: string): string {
+  return tokenStore.get(channelId) ?? "";
+}
+
+/**
+ * Returns text appended since `offset` (length-based cursor).
+ * If offset > current length (store was cleared mid-turn), returns full current text
+ * so caller can reset their cursor to the new length.
+ * Returns empty string if no new text.
+ */
+export function getTokensSince(channelId: string, offset: number): string {
+  const current = tokenStore.get(channelId) ?? "";
+  if (offset > current.length) return current;
+  if (offset >= current.length) return "";
+  return current.slice(offset);
+}
+
+export function clearTokens(channelId: string): void {
+  tokenStore.delete(channelId);
+}

@@ -6,15 +6,17 @@ import {
   initDatabase,
 } from "./database.ts";
 import { handleRequest } from "./router.ts";
-import { clearProgress, setProgress } from "../agent/progress.ts";
+import { clearProgress, clearTokens, setProgress } from "../agent/progress.ts";
 
 beforeEach(() => {
   initDatabase(":memory:");
   clearProgress("ch-1");
+  clearTokens("ch-1");
 });
 
 afterEach(() => {
   clearProgress("ch-1");
+  clearTokens("ch-1");
 });
 
 function parseSseFrames(body: string): Array<{ event: string; data: unknown }> {
@@ -171,4 +173,43 @@ test("SSE stream emits error event when no reply within timeout", async () => {
 
   // Abort immediately to avoid hanging the test
   controller.abort();
+});
+
+// --- Test 5: Token store — append and retrieve deltas ---
+test("appendToken accumulates text, getTokensSince returns deltas", async () => {
+  const { appendToken, getTokens, getTokensSince, clearTokens } = await import("../agent/progress.ts");
+  clearTokens("ch-token-A");
+
+  appendToken("ch-token-A", "Hello");
+  expect(getTokens("ch-token-A")).toBe("Hello");
+  expect(getTokensSince("ch-token-A", 0)).toBe("Hello");
+
+  appendToken("ch-token-A", " world");
+  expect(getTokens("ch-token-A")).toBe("Hello world");
+  expect(getTokensSince("ch-token-A", 5)).toBe(" world");
+
+  clearTokens("ch-token-A");
+  expect(getTokens("ch-token-A")).toBe("");
+});
+
+// --- Test 6: Token store reset mid-turn (tool-call scenario) ---
+test("getTokensSince returns full current when offset exceeds length (post-clear)", async () => {
+  const { appendToken, getTokensSince, clearTokens } = await import("../agent/progress.ts");
+  clearTokens("ch-token-B");
+
+  // Simulate: round 1 of LLM streamed 5 tokens
+  appendToken("ch-token-B", "Round1");
+  const round1Delta = getTokensSince("ch-token-B", 0);
+  expect(round1Delta).toBe("Round1");
+  const offsetAfterRound1 = round1Delta.length; // 6
+
+  // Simulate: tool call clears store; round 2 starts fresh with shorter text
+  clearTokens("ch-token-B");
+  appendToken("ch-token-B", "R2");
+
+  // Caller's stale offset (6) > new length (2) → should get full "R2" back
+  const round2Delta = getTokensSince("ch-token-B", offsetAfterRound1);
+  expect(round2Delta).toBe("R2");
+
+  clearTokens("ch-token-B");
 });
